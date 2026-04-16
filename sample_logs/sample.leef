@@ -1,0 +1,2 @@
+LEEF:2.0|IBM|QRadar|7.4|AuthFail|^	devTime=Nov 15 2024 12:00:00	devTimeFormat=MMM dd yyyy HH:mm:ss	src=10.0.0.5	srcPort=22	dst=192.168.1.10	dstPort=22	usrName=root	sev=8	cat=Authentication	proto=TCP
+LEEF:1.0|Symantec|SEP|14.3|5001|	src=192.168.5.50	dst=10.10.10.1	sev=7	cat=Intrusion	usrName=DOMAIN\jdoe	srcPort=4444	dstPort=80	proto=TCP

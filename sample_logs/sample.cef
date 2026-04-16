@@ -1,0 +1,4 @@
+CEF:0|Palo Alto Networks|PAN-OS|10.1|threat/url|URL Filtering Log|7|rt=Nov 15 2024 12:00:00 src=192.168.1.100 dst=93.184.216.34 spt=54321 dpt=443 proto=TCP act=block cat=malware suser=jdoe msg=Blocked connection to known malicious URL
+CEF:0|Cisco|ASA|9.16|302013|Built outbound TCP connection|3|rt=Nov 15 2024 12:01:15 src=10.0.0.5 dst=8.8.8.8 spt=45678 dpt=53 proto=UDP act=allow suser=system
+CEF:0|Fortinet|FortiGate|7.0.5|utm-webfilter|webfilter|8|rt=Nov 15 2024 12:02:30 src=172.16.0.20 dst=192.0.2.1 spt=12345 dpt=80 proto=TCP act=blocked cat=phishing suser=attacker msg=Phishing site blocked
+CEF:0|Microsoft|Defender|4.18|1116|Malware detected|9|rt=Nov 15 2024 12:03:45 src=192.168.10.50 act=quarantine cat=trojan suser=DOMAIN\jsmith msg=Trojan:Win32/Trickbot detected

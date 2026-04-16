@@ -1,0 +1,4 @@
+<34>1 2024-11-15T12:00:00.000Z web-server-01 nginx 1234 - - 192.168.1.100 - GET /admin HTTP/1.1 403
+<165>1 2024-11-15T12:01:05.123Z firewall-01 iptables 5678 ID47 - Failed password for root from 10.0.0.5 port 22
+<13>1 2024-11-15T12:02:30.456Z db-server-02 mysqld 9012 - - Access denied for user root@192.168.5.20
+<86>1 2024-11-15T12:03:00.789Z app-server sshd 4321 - - Accepted publickey for deploy from 10.10.1.5 port 54322

@@ -1,0 +1,62 @@
+<Events>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+  <System>
+    <EventID>4625</EventID>
+    <Level>3</Level>
+    <TimeCreated SystemTime="2024-11-15T12:00:00.000000000Z"/>
+    <Computer>WIN-SERVER01</Computer>
+    <Channel>Security</Channel>
+    <Provider Name="Microsoft-Windows-Security-Auditing"/>
+  </System>
+  <EventData>
+    <Data Name="TargetUserName">administrator</Data>
+    <Data Name="IpAddress">192.168.1.200</Data>
+    <Data Name="IpPort">54321</Data>
+  </EventData>
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+  <System>
+    <EventID>4688</EventID>
+    <Level>4</Level>
+    <TimeCreated SystemTime="2024-11-15T12:01:00.000000000Z"/>
+    <Computer>WIN-WORKSTATION02</Computer>
+    <Channel>Security</Channel>
+    <Provider Name="Microsoft-Windows-Security-Auditing"/>
+  </System>
+  <EventData>
+    <Data Name="SubjectUserName">jdoe</Data>
+    <Data Name="NewProcessName">C:\Windows\System32\cmd.exe</Data>
+    <Data Name="NewProcessId">0x1234</Data>
+  </EventData>
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+  <System>
+    <EventID>4624</EventID>
+    <Level>4</Level>
+    <TimeCreated SystemTime="2024-11-15T12:02:30.000000000Z"/>
+    <Computer>WIN-DC01</Computer>
+    <Channel>Security</Channel>
+    <Provider Name="Microsoft-Windows-Security-Auditing"/>
+  </System>
+  <EventData>
+    <Data Name="TargetUserName">svcAccount</Data>
+    <Data Name="IpAddress">10.10.5.50</Data>
+    <Data Name="IpPort">49876</Data>
+  </EventData>
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+  <System>
+    <EventID>7045</EventID>
+    <Level>2</Level>
+    <TimeCreated SystemTime="2024-11-15T12:03:45.000000000Z"/>
+    <Computer>WIN-SERVER01</Computer>
+    <Channel>System</Channel>
+    <Provider Name="Service Control Manager"/>
+  </System>
+  <EventData>
+    <Data Name="ServiceName">MaliciousService</Data>
+    <Data Name="ImagePath">C:\Temp\evil.exe</Data>
+    <Data Name="AccountName">LocalSystem</Data>
+  </EventData>
+</Event>
+</Events>
