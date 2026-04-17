@@ -1,0 +1,50 @@
+{
+  "Records": [
+    {
+      "eventVersion": "1.08",
+      "userIdentity": {"type": "IAMUser", "userName": "jdoe", "accountId": "123456789012"},
+      "eventTime": "2024-11-15T12:00:00Z",
+      "eventSource": "signin.amazonaws.com",
+      "eventName": "ConsoleLogin",
+      "awsRegion": "us-east-1",
+      "sourceIPAddress": "203.0.113.42",
+      "errorCode": "Failed authentication",
+      "errorMessage": "Failed authentication",
+      "requestID": "req-001",
+      "eventType": "AwsConsoleSignIn"
+    },
+    {
+      "eventVersion": "1.08",
+      "userIdentity": {"type": "IAMUser", "userName": "admin", "accountId": "123456789012"},
+      "eventTime": "2024-11-15T12:01:30Z",
+      "eventSource": "iam.amazonaws.com",
+      "eventName": "CreateAccessKey",
+      "awsRegion": "us-east-1",
+      "sourceIPAddress": "198.51.100.10",
+      "requestID": "req-002",
+      "eventType": "AwsApiCall"
+    },
+    {
+      "eventVersion": "1.08",
+      "userIdentity": {"type": "IAMUser", "userName": "devops", "accountId": "123456789012"},
+      "eventTime": "2024-11-15T12:02:45Z",
+      "eventSource": "s3.amazonaws.com",
+      "eventName": "DeleteBucket",
+      "awsRegion": "us-west-2",
+      "sourceIPAddress": "10.0.0.50",
+      "requestID": "req-003",
+      "eventType": "AwsApiCall"
+    },
+    {
+      "eventVersion": "1.08",
+      "userIdentity": {"type": "Root", "accountId": "123456789012"},
+      "eventTime": "2024-11-15T12:04:00Z",
+      "eventSource": "cloudtrail.amazonaws.com",
+      "eventName": "StopLogging",
+      "awsRegion": "us-east-1",
+      "sourceIPAddress": "203.0.113.99",
+      "requestID": "req-004",
+      "eventType": "AwsApiCall"
+    }
+  ]
+}

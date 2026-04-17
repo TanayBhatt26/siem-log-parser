@@ -31,6 +31,18 @@ class LogEvent:
     raw: Optional[str] = None
     extensions: Dict[str, Any] = field(default_factory=dict)
 
+    # Enrichment fields (populated by enrichment pipeline)
+    geo_country: Optional[str] = None
+    geo_country_code: Optional[str] = None
+    geo_city: Optional[str] = None
+    geo_lat: Optional[float] = None
+    geo_lon: Optional[float] = None
+    geo_isp: Optional[str] = None
+    geo_asn: Optional[str] = None
+    rdns: Optional[str] = None
+    abuse_score: Optional[int] = None
+    is_malicious: Optional[bool] = None
+
     def to_dict(self) -> dict:
         return asdict(self)
 

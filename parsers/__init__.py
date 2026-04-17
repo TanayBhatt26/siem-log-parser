@@ -1,3 +1,4 @@
+import re
 """parsers/__init__.py — Parser Router with auto-detect"""
 
 import sys, os
@@ -8,6 +9,9 @@ from parsers.cef_parser import parse_cef
 from parsers.leef_parser import parse_leef
 from parsers.json_parser import parse_json
 from parsers.evtx_parser import parse_evtx
+from parsers.aws_parser import parse_aws
+from parsers.nginx_parser import parse_nginx
+from parsers.zeek_parser import parse_zeek
 from schema import LogEvent
 from typing import List
 
@@ -17,6 +21,9 @@ PARSERS = {
     "leef": parse_leef,
     "json": parse_json,
     "evtx": parse_evtx,
+    "aws_cloudtrail": parse_aws,
+    "nginx": parse_nginx,
+    "zeek": parse_zeek,
 }
 
 def detect_format(content: str) -> str:
@@ -32,6 +39,15 @@ def detect_format(content: str) -> str:
         return "evtx"
     if stripped.startswith("<") and ">" in stripped[:6]:
         return "syslog"
+    # Nginx/Apache combined log: IP - - [timestamp]
+    if re.match(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\s+-\s+', stripped):
+        return "nginx"
+    # Zeek: starts with #separator or #path or #fields
+    if stripped.startswith("#separator") or stripped.startswith("#path") or stripped.startswith("#fields"):
+        return "zeek"
+    # AWS CloudTrail: JSON with "Records" array containing "eventName"
+    if '"eventName"' in stripped or '"eventSource"' in stripped:
+        return "aws_cloudtrail"
     months = ("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
     if any(stripped.startswith(m) for m in months):
         return "syslog"
