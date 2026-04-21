@@ -53,7 +53,14 @@ def parse_syslog(content: str) -> List[LogEvent]:
             fac, sev = _decode_priority(int(pri))
             sev_label, sev_code = normalize_severity(sev)
             try:
-                dt = datetime.strptime(f"{datetime.now().year} {ts_str}", "%Y %b %d %H:%M:%S")
+                # Bug #10 fix: RFC 3164 omits the year. Using datetime.now().year
+                # causes logs from Dec 31 parsed in Jan to appear one year in the future.
+                # Heuristic: if parsed month is ahead of current month, use previous year.
+                now = datetime.now()
+                year = now.year
+                dt = datetime.strptime(f"{year} {ts_str}", "%Y %b %d %H:%M:%S")
+                if dt.month > now.month or (dt.month == now.month and dt.day > now.day + 1):
+                    dt = dt.replace(year=year - 1)
                 ts = dt.isoformat()
             except ValueError:
                 ts = ts_str

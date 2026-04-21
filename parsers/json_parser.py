@@ -70,12 +70,17 @@ def _extract_records(data):
 def parse_json(content: str) -> List[LogEvent]:
     events = []
     lines = [l.strip() for l in content.splitlines() if l.strip()]
+    # Bug #9 fix: Original code set all_valid=False and broke on first bad line,
+    # discarding all previously-parsed valid lines. A 1000-line file with one
+    # corrupt line would lose all 999 valid events. Fix: parse every line
+    # independently, skip bad ones, use results if we got at least one hit.
     parsed_ndjson = []
-    all_valid = True
     for line in lines:
-        try: parsed_ndjson.append(json.loads(line))
-        except json.JSONDecodeError: all_valid = False; break
-    if all_valid and parsed_ndjson:
+        try:
+            parsed_ndjson.append(json.loads(line))
+        except json.JSONDecodeError:
+            pass  # skip corrupt lines, keep valid ones
+    if parsed_ndjson:
         for item in parsed_ndjson:
             for rec in _extract_records(item):
                 events.append(_map_record(rec))

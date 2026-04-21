@@ -17,7 +17,16 @@ from enrichers import enrich
 from storage.db import store_events, query_events, get_stats, delete_events
 
 app = FastAPI(title="SIEM Log Parser API", version="3.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+# Bug #18 fix: allow_origins=["*"] lets any website read stored events or
+# trigger parses via cross-origin requests. Default to localhost only;
+# override by setting the CORS_ORIGINS env var (comma-separated list).
+_cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000").split(",")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_methods=["GET", "POST", "DELETE"],
+    allow_headers=["Content-Type", "Authorization"],
+)
 
 BASE_DIR = Path(__file__).parent.parent
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")

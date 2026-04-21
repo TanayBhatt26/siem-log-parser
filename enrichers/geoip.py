@@ -10,7 +10,12 @@ import requests
 from typing import List, Dict
 from schema import LogEvent
 
-BATCH_URL = "http://ip-api.com/batch"
+# Bug #15 fix: original used plain HTTP, exposing all IP addresses in the log
+# file to any attacker on the network path (MITM can see and modify GeoIP data).
+# ip-api.com supports HTTPS. Note: HTTPS batch requires a Pro key; without one
+# the endpoint returns 403 and we fall back gracefully (enrichment is best-effort).
+# For a fully free HTTPS alternative set GEOIP_PROVIDER=ipinfo in environment.
+BATCH_URL = "https://ip-api.com/batch"
 FIELDS = "status,country,countryCode,city,lat,lon,isp,as,query"
 BATCH_SIZE = 100
 

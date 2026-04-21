@@ -32,8 +32,15 @@ def _resolve_delimiter(rest):
         return "\t", rest[1:]
     m = re.match(r'^(0?x[0-9a-fA-F]{2})(.*)', rest, re.DOTALL)
     if m:
-        try: delimiter = chr(int(m.group(1).lstrip("0x"), 16))
-        except: delimiter = "\t"
+        try:
+            hex_str = m.group(1)
+            # Bug #7 fix: lstrip("0x") removes any '0' or 'x' chars, not just the prefix.
+            # e.g. "0x00".lstrip("0x") → "" → int("",16) raises ValueError.
+            # Use slicing instead.
+            if hex_str.lower().startswith("0x"):
+                hex_str = hex_str[2:]
+            delimiter = chr(int(hex_str, 16))
+        except (ValueError, TypeError): delimiter = "\t"
         return delimiter, m.group(2)
     if rest and not rest[0].isalnum() and rest[0] not in ('"', "'"):
         return rest[0], rest[1:]

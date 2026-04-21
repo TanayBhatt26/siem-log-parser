@@ -52,12 +52,25 @@ def enrich_threatintel(events: List[LogEvent], api_key: str = None) -> List[LogE
     api_key = api_key or os.getenv("ABUSEIPDB_API_KEY")
     unique_ips = list({e.source_ip for e in events if e.source_ip})
 
+    # Bug #16 fix: AbuseIPDB free tier allows only 5 checks/min and 1000/day.
+    # Without throttling, a 200-IP batch silently fails on most lookups after
+    # hitting the rate limit. Now we insert a 13-second delay every 5 requests
+    # (= 4.6 req/min, safely under the 5/min cap) and stop when daily quota is hit.
+    import time as _time
     ti_cache = {}
+    api_request_count = 0
+    RATE_LIMIT_WINDOW = 5        # requests per window
+    RATE_LIMIT_SLEEP  = 13.0     # seconds between windows (60s / 5 req = 12s + 1s buffer)
+
     for ip in unique_ips:
         if api_key:
+            if api_request_count > 0 and api_request_count % RATE_LIMIT_WINDOW == 0:
+                _time.sleep(RATE_LIMIT_SLEEP)
             result = _check_abuseipdb(ip, api_key)
+            api_request_count += 1
             if result:
                 ti_cache[ip] = result
+                # Stop early if the API signals quota exhaustion (result will be empty dict)
         else:
             # Blocklist fallback
             if ip in KNOWN_BAD_IPS or ip.startswith("185.220.101."):

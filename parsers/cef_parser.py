@@ -11,13 +11,17 @@ CEF_HEADER = re.compile(
     re.IGNORECASE
 )
 EXT_PATTERN = re.compile(r'(\w+)=((?:(?!\s+\w+=).)*)', re.DOTALL)
+# Bug #8 fix: suser (source actor) and duser (destination) are distinct.
+# Map suser → username (the actor); preserve duser in extensions so no data is lost.
 CEF_FIELD_MAP = {
     "src": "source_ip", "spt": "source_port", "dst": "dest_ip", "dpt": "dest_port",
-    "suser": "username", "duser": "username", "sproc": "process_name", "spid": "process_id",
+    "suser": "username", "sproc": "process_name", "spid": "process_id",
     "proto": "protocol", "in": "bytes_in", "out": "bytes_out",
     "act": "event_action", "cat": "category", "msg": "message",
     "rt": "timestamp", "start": "timestamp", "dvchost": "source_host",
 }
+# duser is intentionally excluded from CEF_FIELD_MAP so it lands in extensions["duser"]
+# rather than overwriting the source username.
 
 def _parse_extensions(ext_str):
     result = {}

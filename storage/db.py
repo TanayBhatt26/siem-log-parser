@@ -1,7 +1,7 @@
 """storage/db.py — SQLite persistence layer for parsed log events"""
 
 import sqlite3, json, os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -70,7 +70,9 @@ def store_events(events: List[LogEvent], session_id: str = None,
     """
     init_db()
     if not session_id:
-        session_id = datetime.utcnow().strftime("%Y%m%d_%H%M%S_%f")
+        # Bug #17 fix: datetime.utcnow() is deprecated since Python 3.12.
+        # Use datetime.now(timezone.utc) which is both correct and future-proof.
+        session_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
 
     stored = 0
     with get_conn() as conn:

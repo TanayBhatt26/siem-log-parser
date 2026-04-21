@@ -44,8 +44,20 @@ def _status_to_severity(code: str) -> tuple:
     return STATUS_SEVERITY.get(prefix, ("low", 2))
 
 def _parse_nginx_ts(ts_str: str) -> str:
-    """Convert '10/Oct/2024:13:55:36 +0000' to ISO-8601."""
+    """Convert '10/Oct/2024:13:55:36 +0530' to ISO-8601 with correct timezone.
+    Bug #11 fix: original code sliced to [:20] dropping '+ZZZZ', then appended
+    a hardcoded 'Z', making '+0530' appear as UTC (off by 5h30m).
+    Now we parse the full string including timezone offset.
+    """
+    ts_str = ts_str.strip()
     try:
+        # Full parse with timezone offset (e.g. "+0530", "-0700", "+0000")
+        dt = datetime.strptime(ts_str, "%d/%b/%Y:%H:%M:%S %z")
+        return dt.isoformat()
+    except ValueError:
+        pass
+    try:
+        # Fallback: no timezone present — treat as UTC
         dt = datetime.strptime(ts_str[:20], "%d/%b/%Y:%H:%M:%S")
         return dt.isoformat() + "Z"
     except ValueError:

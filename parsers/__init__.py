@@ -29,6 +29,12 @@ PARSERS = {
 def detect_format(content: str) -> str:
     stripped = content.strip()
     first_line = stripped.splitlines()[0].strip() if stripped else ""
+    # Bug #2 fix: Check AWS CloudTrail BEFORE generic JSON — CloudTrail files
+    # start with {"Records":[ which would otherwise match the JSON branch first.
+    # Peek into first 2000 chars to avoid scanning huge files.
+    peek = stripped[:2000]
+    if ('"eventName"' in peek or '"eventSource"' in peek) and '"Records"' in peek:
+        return "aws_cloudtrail"
     if stripped.startswith(("{","[")) or (first_line.startswith("{") and first_line.endswith("}")):
         return "json"
     if "CEF:" in stripped[:200]:
@@ -45,9 +51,6 @@ def detect_format(content: str) -> str:
     # Zeek: starts with #separator or #path or #fields
     if stripped.startswith("#separator") or stripped.startswith("#path") or stripped.startswith("#fields"):
         return "zeek"
-    # AWS CloudTrail: JSON with "Records" array containing "eventName"
-    if '"eventName"' in stripped or '"eventSource"' in stripped:
-        return "aws_cloudtrail"
     months = ("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
     if any(stripped.startswith(m) for m in months):
         return "syslog"
