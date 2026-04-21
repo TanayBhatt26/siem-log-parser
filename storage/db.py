@@ -1,11 +1,13 @@
 """storage/db.py — SQLite persistence layer for parsed log events"""
 
-import sqlite3, json, os
+import sqlite3, json, os, logging
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from schema import LogEvent
+
+logger = logging.getLogger(__name__)
 
 DB_PATH = os.getenv("SIEM_DB_PATH", os.path.join(os.path.dirname(__file__), "..", "siem_events.db"))
 
@@ -103,11 +105,35 @@ def store_events(events: List[LogEvent], session_id: str = None,
                     json.dumps(evt.to_dict(), default=str),
                 ))
                 stored += 1
-            except Exception:
+            except Exception as e:
+                logger.warning("Failed to store event %s: %s", evt.event_id, e)
                 continue
         conn.commit()
 
     return stored
+
+
+SAFE_ORDER_COLUMNS = {
+    "timestamp": "timestamp",
+    "severity": "severity",
+    "created_at": "created_at",
+    "abuse_score": "abuse_score",
+    "source_format": "source_format",
+}
+SAFE_ORDER_DIRS = {"ASC", "DESC"}
+
+def _sanitize_order(order_by: str) -> str:
+    """Parse and validate order_by to prevent SQL injection."""
+    parts = order_by.strip().split()
+    if len(parts) == 2:
+        col, direction = parts[0].strip().lower(), parts[1].strip().upper()
+        if col in SAFE_ORDER_COLUMNS and direction in SAFE_ORDER_DIRS:
+            return f"{SAFE_ORDER_COLUMNS[col]} {direction}"
+    elif len(parts) == 1:
+        col = parts[0].strip().lower()
+        if col in SAFE_ORDER_COLUMNS:
+            return f"{SAFE_ORDER_COLUMNS[col]} DESC"
+    return "timestamp DESC"
 
 
 def query_events(
@@ -159,10 +185,7 @@ def query_events(
         conditions.append("timestamp <= ?"); params.append(to_time)
 
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-    safe_order = order_by if order_by in (
-        "timestamp DESC", "timestamp ASC", "severity DESC",
-        "created_at DESC", "abuse_score DESC"
-    ) else "timestamp DESC"
+    safe_order = _sanitize_order(order_by)
 
     with get_conn() as conn:
         total_row = conn.execute(f"SELECT COUNT(*) FROM events {where}", params).fetchone()

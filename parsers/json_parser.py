@@ -30,9 +30,10 @@ def _flatten(d, prefix="", sep="."):
     out = {}
     for k, v in d.items():
         full_key = f"{prefix}{sep}{k}" if prefix else k
-        out[full_key] = v
         if isinstance(v, dict):
             out.update(_flatten(v, full_key, sep))
+        else:
+            out[full_key] = v
     return out
 
 def _map_record(record):
@@ -69,34 +70,29 @@ def _extract_records(data):
 
 def parse_json(content: str) -> List[LogEvent]:
     events = []
-    lines = [l.strip() for l in content.splitlines() if l.strip()]
-    # Bug #9 fix: Original code set all_valid=False and broke on first bad line,
-    # discarding all previously-parsed valid lines. A 1000-line file with one
-    # corrupt line would lose all 999 valid events. Fix: parse every line
-    # independently, skip bad ones, use results if we got at least one hit.
-    parsed_ndjson = []
-    for line in lines:
-        try:
-            parsed_ndjson.append(json.loads(line))
-        except json.JSONDecodeError:
-            pass  # skip corrupt lines, keep valid ones
-    if parsed_ndjson:
-        for item in parsed_ndjson:
-            for rec in _extract_records(item):
-                events.append(_map_record(rec))
-        return events
+    stripped = content.strip()
+
+    # Try whole-file JSON parse first (handles JSON arrays and single objects)
     try:
-        data = json.loads(content)
+        data = json.loads(stripped)
         for rec in _extract_records(data):
             events.append(_map_record(rec))
         return events
     except json.JSONDecodeError:
         pass
+
+    # NDJSON — parse each line independently, skip bad ones
+    # Bug #9 fix: parse every line independently, skip bad ones, keep valid results.
+    lines = [l.strip() for l in content.splitlines() if l.strip()]
+    parsed_any = False
     for line in lines:
         try:
-            data = json.loads(line)
-            for rec in _extract_records(data):
+            item = json.loads(line)
+            for rec in _extract_records(item):
                 events.append(_map_record(rec))
+            parsed_any = True
         except json.JSONDecodeError:
+            # Fallback — emit raw line as event for corrupt lines
             events.append(LogEvent(source_format="json", message=line, raw=line))
+
     return events

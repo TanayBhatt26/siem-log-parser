@@ -1,6 +1,6 @@
-import re
 """parsers/__init__.py — Parser Router with auto-detect"""
 
+import re
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 

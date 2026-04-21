@@ -32,6 +32,10 @@ SEV_COLORS = {"critical":"bold red","high":"bold yellow","medium":"yellow","low"
 SEV_ICONS  = {"critical":"🔴","high":"🟠","medium":"🟡","low":"🟢"}
 
 def _read_file(path):
+    file_size = os.path.getsize(path)
+    if file_size > 100 * 1024 * 1024:  # 100MB
+        click.echo(f"Warning: file is {file_size // (1024*1024)}MB — this may use significant memory.",
+                   err=True)
     with open(path, "rb") as f:
         raw = f.read()
     if raw[:8] == b"ElfFile\x00":
@@ -362,6 +366,9 @@ def watch(file, input_fmt, interval, do_enrich):
             with open(file, errors="replace") as fh:
                 lines = fh.readlines()
 
+            new_len = len(lines)
+            if new_len < seen:
+                seen = 0
             new = lines[seen:]
             if new:
                 evts = parse("".join(new), fmt=cached_fmt)

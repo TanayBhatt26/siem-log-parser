@@ -13,12 +13,15 @@ MAX_WORKERS = 20
 
 def _rdns(ip: str) -> str:
     """Resolve IP to hostname. Returns None on failure."""
+    old_timeout = socket.getdefaulttimeout()
     try:
         socket.setdefaulttimeout(TIMEOUT)
         hostname = socket.gethostbyaddr(ip)[0]
         return hostname if hostname != ip else None
     except Exception:
         return None
+    finally:
+        socket.setdefaulttimeout(old_timeout)  # always restore original
 
 
 def enrich_rdns(events: List[LogEvent]) -> List[LogEvent]:

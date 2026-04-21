@@ -19,6 +19,8 @@ FACILITY_LABELS = ["kern","user","mail","daemon","auth","syslog","lpr","news","u
                    "local4","local5","local6","local7"]
 
 def _decode_priority(pri):
+    if pri < 0 or pri > 191:
+        return "unknown", "unknown"
     fac = FACILITY_LABELS[pri >> 3] if (pri >> 3) < len(FACILITY_LABELS) else str(pri >> 3)
     sev = SEVERITY_LABELS[pri & 7] if (pri & 7) < len(SEVERITY_LABELS) else "unknown"
     return fac, sev

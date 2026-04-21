@@ -10,7 +10,7 @@ CEF_HEADER = re.compile(
     r"CEF:(\d+)\|([^|]*)\|([^|]*)\|([^|]*)\|([^|]*)\|([^|]*)\|(\d+)\|?(.*)?$",
     re.IGNORECASE
 )
-EXT_PATTERN = re.compile(r'(\w+)=((?:(?!\s+\w+=).)*)', re.DOTALL)
+
 # Bug #8 fix: suser (source actor) and duser (destination) are distinct.
 # Map suser → username (the actor); preserve duser in extensions so no data is lost.
 CEF_FIELD_MAP = {
@@ -24,9 +24,13 @@ CEF_FIELD_MAP = {
 # rather than overwriting the source username.
 
 def _parse_extensions(ext_str):
+    """Parse CEF extension key=value pairs. Uses split instead of regex to avoid ReDoS."""
     result = {}
-    for m in EXT_PATTERN.finditer(ext_str):
-        result[m.group(1).strip()] = m.group(2).strip()
+    parts = re.split(r'\s+(?=\w+=)', ext_str)
+    for part in parts:
+        if '=' in part:
+            key, _, val = part.partition('=')
+            result[key.strip()] = val.strip()
     return result
 
 def parse_cef(content: str) -> List[LogEvent]:

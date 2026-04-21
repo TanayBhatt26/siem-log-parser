@@ -3,11 +3,13 @@ Handles: conn.log, http.log, dns.log, weird.log, notice.log, ssl.log
 Auto-detects log type from #path header.
 """
 
-import re
+import re, logging
 from typing import List, Dict
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from schema import LogEvent, normalize_severity
+
+logger = logging.getLogger(__name__)
 
 # conn_state codes → severity
 CONN_STATE_SEV = {
@@ -188,6 +190,9 @@ def parse_zeek(content: str) -> List[LogEvent]:
             continue
 
         fields = line.split("\t")
+        if len(fields) != len(headers):
+            logger.debug("Zeek field count mismatch: expected %d fields, got %d (log_type=%s)",
+                         len(headers), len(fields), log_type)
         parse_fn = LOG_PARSERS.get(log_type, _parse_conn)
         try:
             evt = parse_fn(fields, headers)

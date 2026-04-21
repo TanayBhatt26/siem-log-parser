@@ -1,12 +1,13 @@
 """api/main.py — FastAPI Backend for SIEM Log Parser v3.0"""
 
-import sys, os, tempfile, uuid
+import sys, os, tempfile, uuid, logging
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Query
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Query, Header, Depends
 from fastapi.responses import Response, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 from pathlib import Path
 from typing import Optional
 
@@ -16,20 +17,38 @@ from exporters import export, SUPPORTED_FORMATS
 from enrichers import enrich
 from storage.db import store_events, query_events, get_stats, delete_events
 
+logger = logging.getLogger(__name__)
+
 app = FastAPI(title="SIEM Log Parser API", version="3.0.0")
-# Bug #18 fix: allow_origins=["*"] lets any website read stored events or
-# trigger parses via cross-origin requests. Default to localhost only;
-# override by setting the CORS_ORIGINS env var (comma-separated list).
 _cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000").split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
     allow_methods=["GET", "POST", "DELETE"],
-    allow_headers=["Content-Type", "Authorization"],
+    allow_headers=["Content-Type", "Authorization", "X-API-Key"],
 )
 
 BASE_DIR = Path(__file__).parent.parent
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+
+MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50MB
+
+async def require_api_key(x_api_key: str = Header(None)):
+    """Require SIEM_API_KEY for destructive operations.
+    If SIEM_API_KEY env var is not set, allow the operation (dev mode).
+    """
+    expected = os.getenv("SIEM_API_KEY")
+    if expected and (not x_api_key or x_api_key != expected):
+        raise HTTPException(401, "Invalid or missing API key. Set X-API-Key header.")
+
+class ParseTextRequest(BaseModel):
+    content: str = Field(..., max_length=10_000_000)  # 10MB max
+    input_format: str = Field(
+        "auto",
+        pattern=r"^(auto|syslog|cef|leef|json|evtx|aws_cloudtrail|nginx|zeek)$"
+    )
+    enrich: bool = False
+
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_ui():
@@ -51,7 +70,10 @@ async def parse_logs(
     do_dns: str = Form("false"),
     abuseipdb_key: str = Form(""),
 ):
-    content_bytes = await file.read()
+    content_bytes = await file.read(MAX_UPLOAD_SIZE + 1)
+    if len(content_bytes) > MAX_UPLOAD_SIZE:
+        raise HTTPException(413, f"File too large. Maximum size: {MAX_UPLOAD_SIZE // (1024*1024)}MB")
+
     is_binary_evtx = content_bytes[:8] == b"ElfFile\x00"
     if is_binary_evtx:
         detected = "evtx"
@@ -68,7 +90,8 @@ async def parse_logs(
         else:
             events = parse(content_str, fmt=fmt)
     except Exception as e:
-        raise HTTPException(500, f"Parse error: {e}")
+        logger.error("Parse error for %s: %s", file.filename, e, exc_info=True)
+        raise HTTPException(500, "Failed to parse uploaded file. Check server logs for details.")
 
     if do_enrich.lower() == "true":
         events = enrich(events, geoip=True, dns=do_dns.lower()=="true",
@@ -86,16 +109,18 @@ async def parse_logs(
     try:
         result, media_type, ext = export(events, output_format, index=es_index)
     except Exception as e:
-        raise HTTPException(500, f"Export error: {e}")
+        logger.error("Export error: %s", e, exc_info=True)
+        raise HTTPException(500, "Failed to export parsed events. Check server logs for details.")
     if isinstance(result, str): result = result.encode("utf-8")
     return Response(content=result, media_type=media_type,
         headers={"Content-Disposition": f'attachment; filename="siem_parsed_{fmt}.{ext}"',
                  "X-Session-Id": session_id or "", "X-Event-Count": str(len(events))})
 
 @app.post("/api/parse/text")
-async def parse_text(payload: dict):
-    content = payload.get("content",""); input_format = payload.get("input_format","auto")
-    do_enrich_flag = payload.get("enrich", False)
+async def parse_text(payload: ParseTextRequest):
+    content = payload.content
+    input_format = payload.input_format
+    do_enrich_flag = payload.enrich
     detected = detect_format(content); fmt = input_format if input_format != "auto" else detected
     events = parse(content, fmt=fmt)
     if do_enrich_flag: events = enrich(events, geoip=True)
@@ -108,8 +133,13 @@ async def get_sample(fmt: str):
                "aws_cloudtrail":"aws.json","nginx":"nginx.log","zeek":"zeek.log"}
     ext = ext_map.get(fmt)
     if not ext: raise HTTPException(404, f"No sample for: {fmt}")
-    path = BASE_DIR / "sample_logs" / f"sample.{ext}"
+    sample_base = (BASE_DIR / "sample_logs").resolve()
+    path = (BASE_DIR / "sample_logs" / f"sample.{ext}").resolve()
+    if not str(path).startswith(str(sample_base)):
+        raise HTTPException(403, "Path traversal blocked")
     if not path.exists(): raise HTTPException(404, "Sample not found")
+    if path.stat().st_size > 1_000_000:  # 1MB max
+        raise HTTPException(413, "Sample file too large")
     return Response(content=path.read_text(), media_type="text/plain")
 
 @app.get("/api/events")
@@ -130,7 +160,7 @@ async def list_events(
 async def events_stats():
     return get_stats()
 
-@app.delete("/api/events")
+@app.delete("/api/events", dependencies=[Depends(require_api_key)])
 async def clear_events(session_id: Optional[str]=None):
     count = delete_events(session_id=session_id)
     return {"deleted": count, "session_id": session_id}

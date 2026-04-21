@@ -2,9 +2,17 @@
 
 import xml.etree.ElementTree as ET
 from typing import List
-import sys, os
+import sys, os, logging
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from schema import LogEvent, normalize_severity
+
+logger = logging.getLogger(__name__)
+
+try:
+    import defusedxml.ElementTree as SafeET
+except ImportError:
+    SafeET = ET
+    logger.warning("defusedxml not installed. Install it: pip install defusedxml")
 
 EVENTID_MAP = {
     "4624": ("Authentication", "logon_success"),
@@ -39,7 +47,7 @@ def _strip_ns(elem):
 def _parse_event_xml(event_elem: ET.Element) -> LogEvent:
     evt = LogEvent(source_format="evtx")
     try: evt.raw = ET.tostring(event_elem, encoding="unicode")
-    except: pass
+    except Exception: pass
     event_elem = _strip_ns(event_elem)
     system = event_elem.find("System") or event_elem.find("s")
     if system is None:
@@ -111,7 +119,7 @@ def parse_evtx_file(filepath: str) -> List[LogEvent]:
         with evtx.Evtx(filepath) as log:
             for record in log.records():
                 try:
-                    root = ET.fromstring(record.xml())
+                    root = SafeET.fromstring(record.xml())
                     events.append(_parse_event_xml(root))
                 except Exception:
                     continue
@@ -126,13 +134,15 @@ def parse_evtx(content) -> List[LogEvent]:
     # Binary .evtx — write to temp file, use parse_evtx_file
     if isinstance(content, bytes) and content[:8] == b"ElfFile\x00":
         import tempfile
-        with tempfile.NamedTemporaryFile(suffix=".evtx", delete=False) as tmp:
-            tmp.write(content)
-            tmp_path = tmp.name
+        tmp_path = None
         try:
+            with tempfile.NamedTemporaryFile(suffix=".evtx", delete=False) as tmp:
+                tmp.write(content)
+                tmp_path = tmp.name
             return parse_evtx_file(tmp_path)
         finally:
-            os.unlink(tmp_path)
+            if tmp_path and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
 
     if isinstance(content, bytes):
         try: content = content.decode("utf-8")
@@ -142,7 +152,7 @@ def parse_evtx(content) -> List[LogEvent]:
     try:
         if "<Events>" not in content and (content.count("<Event ") + content.count("<Event>")) > 1:
             content = f"<Events>{content}</Events>"
-        root = ET.fromstring(content)
+        root = SafeET.fromstring(content)
         _strip_ns(root)
         if root.tag in ("Events",):
             elems = list(root)

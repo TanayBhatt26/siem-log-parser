@@ -21,6 +21,18 @@ COMBINED = re.compile(
     r'(?:\s+"([^"]*)"\s+"([^"]*)")?'  # referer, user-agent (optional)
 )
 
+# Fallback pattern for malformed request lines ("-", "", "GET", "GET /path")
+COMBINED_MALFORMED = re.compile(
+    r'(\S+)\s+'              # client IP
+    r'\S+\s+'                # ident
+    r'(\S+)\s+'              # auth user
+    r'\[([^\]]+)\]\s+'       # timestamp
+    r'"([^"]*)"\s+'          # entire request line (any content)
+    r'(\d{3})\s+'            # status code
+    r'(\S+)'                 # bytes
+    r'(?:\s+"([^"]*)"\s+"([^"]*)")?'  # referer, user-agent (optional)
+)
+
 # Error log: YYYY/MM/DD HH:MM:SS [LEVEL] PID#TID: *CID MESSAGE
 NGINX_ERROR = re.compile(
     r'(\d{4}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2})\s+'
@@ -105,6 +117,50 @@ def parse_nginx(content: str) -> List[LogEvent]:
                     "http_path": path,
                     "http_status": status,
                     "http_version": proto,
+                    "referer": referer or "",
+                    "user_agent": ua or "",
+                    "response_bytes": size,
+                }
+            )
+            events.append(evt)
+            continue
+
+        # Try malformed request line pattern
+        m = COMBINED_MALFORMED.match(line)
+        if m:
+            ip, user, ts_raw, request_line, status, size, referer, ua = m.groups()
+            # Parse what we can from the request line
+            req_parts = request_line.split() if request_line else []
+            method = req_parts[0] if len(req_parts) >= 1 else "-"
+            path = req_parts[1] if len(req_parts) >= 2 else "-"
+            proto = req_parts[2] if len(req_parts) >= 3 else "-"
+
+            sev_label, sev_code = _status_to_severity(status)
+            if status in ("401", "403"):
+                sev_label, sev_code = normalize_severity("high")
+
+            try:
+                bytes_val = int(size) if size != "-" else None
+            except ValueError:
+                bytes_val = None
+
+            evt = LogEvent(
+                timestamp=_parse_nginx_ts(ts_raw),
+                source_format="nginx",
+                source_ip=ip if ip != "-" else None,
+                event_type="HTTP/Access",
+                event_action=f"{method} {status}",
+                severity=sev_label,
+                severity_code=sev_code,
+                username=user if user != "-" else None,
+                bytes_out=bytes_val,
+                message=f'{method} {path} → {status} from {ip}',
+                raw=line,
+                extensions={
+                    "http_method": method,
+                    "http_path": path,
+                    "http_status": status,
+                    "request_line": request_line,
                     "referer": referer or "",
                     "user_agent": ua or "",
                     "response_bytes": size,
