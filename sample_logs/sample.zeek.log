@@ -1,0 +1,12 @@
+#separator 	
+#set_separator	,
+#empty_field	(empty)
+#unset_field	-
+#path	conn
+#open	2024-11-15-12-00-00
+#fields	ts	uid	id.orig_h	id.orig_p	id.resp_h	id.resp_p	proto	service	duration	orig_bytes	resp_bytes	conn_state	missed_bytes	history
+#types	time	string	addr	port	addr	port	enum	string	interval	count	count	string	count	string
+1731672000.000000	Cabc1	203.0.113.42	54321	10.0.0.1	443	tcp	ssl	1.234	1024	8192	SF	0	ShADadFf
+1731672060.000000	Cabc2	198.51.100.10	22001	192.168.1.10	22	tcp	ssh	0.001	0	0	REJ	0	S
+1731672120.000000	Cabc3	203.0.113.55	44444	10.0.0.5	80	tcp	http	60.123	512000	128	S0	0	S
+1731672180.000000	Cabc4	10.0.0.20	53124	8.8.8.8	53	udp	dns	0.012	64	128	SF	0	Dd

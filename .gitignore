@@ -8,9 +8,14 @@ venv/
 dist/
 build/
 .DS_Store
-*.log
+# Build/runtime logs (not sample log files)
+*.pyc.log
+uvicorn.log
+access.log
+error.log
 *_parsed.*
 node_modules/
 .idea/
 .vscode/
 exporters/__init_placeholder__
+siem_events.db
