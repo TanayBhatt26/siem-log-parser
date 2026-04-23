@@ -10,8 +10,10 @@ logger = logging.getLogger(__name__)
 
 try:
     import defusedxml.ElementTree as SafeET
+    from defusedxml.common import DefusedXmlException
 except ImportError:
     SafeET = ET
+    class DefusedXmlException(Exception): pass
     logger.warning("defusedxml not installed. Install it: pip install defusedxml")
 
 EVENTID_MAP = {
@@ -163,7 +165,7 @@ def parse_evtx(content) -> List[LogEvent]:
         for elem in elems:
             events.append(_parse_event_xml(elem))
         return events
-    except ET.ParseError:
+    except (ET.ParseError, DefusedXmlException):
         pass
 
     for line in content.splitlines():

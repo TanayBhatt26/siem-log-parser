@@ -107,8 +107,8 @@ class TestCRIT5:
 
     def test_pydantic_model_exists(self):
         from api.main import ParseTextRequest
-        assert hasattr(ParseTextRequest, 'content')
-        assert hasattr(ParseTextRequest, 'input_format')
+        assert 'content' in ParseTextRequest.model_fields or hasattr(ParseTextRequest, 'content')
+        assert 'input_format' in ParseTextRequest.model_fields or hasattr(ParseTextRequest, 'input_format')
 
     def test_invalid_format_rejected(self):
         from api.main import ParseTextRequest

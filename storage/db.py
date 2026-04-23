@@ -160,9 +160,9 @@ def query_events(
     params = []
 
     if severity:
-        conditions.append("severity = ?"); params.append(severity)
+        conditions.append("severity COLLATE NOCASE = ?"); params.append(severity)
     if source_format:
-        conditions.append("source_format = ?"); params.append(source_format)
+        conditions.append("source_format COLLATE NOCASE = ?"); params.append(source_format)
     if source_ip:
         conditions.append("source_ip LIKE ?"); params.append(f"%{source_ip}%")
     if event_type:
