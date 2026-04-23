@@ -52,7 +52,7 @@ class ParseTextRequest(BaseModel):
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_ui():
-    return HTMLResponse(content=(BASE_DIR / "templates" / "index.html").read_text())
+    return HTMLResponse(content=(BASE_DIR / "templates" / "index.html").read_text(encoding="utf-8"))
 
 @app.get("/api/formats")
 async def get_formats():
