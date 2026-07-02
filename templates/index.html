@@ -1,1043 +1,957 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>SIEM Log Parser v3</title>
-  <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
-    rel="stylesheet">
-  <style>
-    :root {
-      --bg: #f8f9fc;
-      --bg2: #ffffff;
-      --panel: #ffffff;
-      --border: #e2e8f0;
-      --accent: #4f46e5;
-      --accent2: #7c3aed;
-      --accent3: #059669;
-      --text: #1e293b;
-      --muted: #64748b;
-      --danger: #dc2626;
-      --warn: #d97706;
-      --shadow: 0 1px 3px rgba(0, 0, 0, .06), 0 1px 2px rgba(0, 0, 0, .04);
-      --shadow-lg: 0 10px 25px rgba(0, 0, 0, .08)
-    }
-
-    *,
-    *::before,
-    *::after {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0
-    }
-
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: 'Inter', system-ui, -apple-system, sans-serif;
-      min-height: 100vh
-    }
-
-    header {
-      padding: 16px 32px;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      background: var(--bg2);
-      box-shadow: var(--shadow)
-    }
-
-    .logo {
-      width: 36px;
-      height: 36px;
-      background: linear-gradient(135deg, var(--accent), var(--accent2));
-      border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 18px;
-      box-shadow: 0 2px 8px rgba(79, 70, 229, .25)
-    }
-
-    header h1 {
-      font-size: 1.05rem;
-      font-weight: 800;
-      letter-spacing: -.02em;
-      color: var(--text)
-    }
-
-    .subtitle {
-      font-size: .68rem;
-      color: var(--muted);
-      font-family: 'JetBrains Mono', monospace;
-      margin-top: 1px
-    }
-
-    .badge {
-      margin-left: auto;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: .62rem;
-      padding: 5px 12px;
-      border-radius: 6px;
-      background: linear-gradient(135deg, rgba(79, 70, 229, .08), rgba(124, 58, 237, .08));
-      border: 1px solid rgba(79, 70, 229, .15);
-      color: var(--accent);
-      font-weight: 600
-    }
-
-    .tabs {
-      display: flex;
-      gap: 0;
-      border-bottom: 1px solid var(--border);
-      background: var(--bg2);
-      padding: 0 32px
-    }
-
-    .tab {
-      padding: 12px 22px;
-      font-size: .76rem;
-      font-weight: 700;
-      letter-spacing: .03em;
-      color: var(--muted);
-      cursor: pointer;
-      border-bottom: 2px solid transparent;
-      transition: all .2s;
-      text-transform: uppercase
-    }
-
-    .tab:hover {
-      color: var(--text)
-    }
-
-    .tab.active {
-      color: var(--accent);
-      border-bottom-color: var(--accent)
-    }
-
-    .tab-content {
-      display: none
-    }
-
-    .tab-content.active {
-      display: block
-    }
-
-    main {
-      max-width: 1400px;
-      margin: 0 auto;
-      padding: 24px
-    }
-
-    .parse-grid {
-      display: grid;
-      grid-template-columns: 380px 1fr;
-      gap: 20px;
-      align-items: start
-    }
-
-    .left-panel {
-      display: flex;
-      flex-direction: column;
-      gap: 14px
-    }
-
-    .card {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      overflow: hidden;
-      box-shadow: var(--shadow)
-    }
-
-    .card-header {
-      padding: 12px 18px;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      background: rgba(248, 250, 252, .8)
-    }
-
-    .card-header h2 {
-      font-size: .72rem;
-      font-weight: 700;
-      letter-spacing: .06em;
-      text-transform: uppercase;
-      color: var(--muted)
-    }
-
-    .card-body {
-      padding: 18px
-    }
-
-    .drop-zone {
-      border: 2px dashed var(--border);
-      border-radius: 12px;
-      padding: 28px 20px;
-      text-align: center;
-      cursor: pointer;
-      transition: all .2s;
-      position: relative;
-      background: rgba(248, 250, 252, .5)
-    }
-
-    .drop-zone:hover,
-    .drop-zone.drag-over {
-      border-color: var(--accent);
-      background: rgba(79, 70, 229, .03)
-    }
-
-    .drop-zone input[type=file] {
-      position: absolute;
-      inset: 0;
-      opacity: 0;
-      cursor: pointer;
-      width: 100%;
-      height: 100%
-    }
-
-    .drop-icon {
-      font-size: 32px;
-      margin-bottom: 6px
-    }
-
-    .drop-text {
-      font-size: .82rem;
-      color: var(--muted)
-    }
-
-    .drop-text strong {
-      color: var(--accent)
-    }
-
-    .drop-hint {
-      font-size: .68rem;
-      color: var(--muted);
-      margin-top: 4px;
-      font-family: 'JetBrains Mono', monospace
-    }
-
-    .file-chosen {
-      display: none;
-      align-items: center;
-      gap: 8px;
-      margin-top: 10px;
-      padding: 8px 12px;
-      background: rgba(5, 150, 105, .06);
-      border: 1px solid rgba(5, 150, 105, .15);
-      border-radius: 8px;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: .72rem;
-      color: var(--accent3)
-    }
-
-    label {
-      display: block;
-      font-size: .68rem;
-      font-weight: 700;
-      letter-spacing: .07em;
-      text-transform: uppercase;
-      color: var(--muted);
-      margin-bottom: 5px
-    }
-
-    select,
-    input[type=text] {
-      width: 100%;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      color: var(--text);
-      padding: 9px 12px;
-      border-radius: 8px;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: .78rem;
-      outline: none;
-      transition: border-color .2s
-    }
-
-    select:focus,
-    input[type=text]:focus {
-      border-color: var(--accent);
-      box-shadow: 0 0 0 3px rgba(79, 70, 229, .08)
-    }
-
-    .form-row {
-      margin-bottom: 14px
-    }
-
-    .form-row:last-child {
-      margin-bottom: 0
-    }
-
-    .fmt-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-      margin-bottom: 14px
-    }
-
-    .fmt-btn {
-      padding: 9px;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: var(--muted);
-      cursor: pointer;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: .68rem;
-      text-align: center;
-      transition: all .15s;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 3px
-    }
-
-    .fmt-btn .fi {
-      font-size: 18px
-    }
-
-    .fmt-btn:hover {
-      border-color: var(--accent);
-      color: var(--accent)
-    }
-
-    .fmt-btn.active {
-      border-color: var(--accent);
-      background: rgba(79, 70, 229, .06);
-      color: var(--accent);
-      font-weight: 600
-    }
-
-    .enrich-row {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 14px;
-      flex-wrap: wrap
-    }
-
-    .toggle-pill {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 12px;
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      cursor: pointer;
-      font-size: .7rem;
-      font-family: 'JetBrains Mono', monospace;
-      color: var(--muted);
-      transition: all .2s;
-      background: var(--bg)
-    }
-
-    .toggle-pill.active {
-      border-color: var(--accent3);
-      background: rgba(5, 150, 105, .06);
-      color: var(--accent3);
-      font-weight: 600
-    }
-
-    .toggle-pill input {
-      display: none
-    }
-
-    .btn {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      width: 100%;
-      padding: 11px 20px;
-      border: none;
-      border-radius: 10px;
-      font-family: 'Inter', sans-serif;
-      font-weight: 700;
-      font-size: .82rem;
-      cursor: pointer;
-      transition: all .2s
-    }
-
-    .btn-primary {
-      background: linear-gradient(135deg, var(--accent), var(--accent2));
-      color: #fff;
-      box-shadow: 0 4px 14px rgba(79, 70, 229, .25)
-    }
-
-    .btn-primary:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 6px 20px rgba(79, 70, 229, .35)
-    }
-
-    .btn-primary:disabled {
-      opacity: .5;
-      cursor: not-allowed;
-      transform: none
-    }
-
-    .btn-secondary {
-      background: transparent;
-      border: 1px solid var(--border);
-      color: var(--muted);
-      margin-top: 8px
-    }
-
-    .btn-secondary:hover {
-      border-color: var(--accent);
-      color: var(--accent)
-    }
-
-    .stats-row {
-      display: grid;
-      grid-template-columns: repeat(5, 1fr);
-      gap: 10px;
-      margin-bottom: 16px
-    }
-
-    .stat-card {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 14px;
-      text-align: center;
-      box-shadow: var(--shadow)
-    }
-
-    .stat-val {
-      font-size: 1.5rem;
-      font-weight: 800;
-      color: var(--text);
-      line-height: 1;
-      font-family: 'JetBrains Mono', monospace
-    }
-
-    .stat-label {
-      font-size: .62rem;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: .07em;
-      margin-top: 4px
-    }
-
-    .sev {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 6px;
-      font-size: .62rem;
-      font-weight: 700;
-      font-family: 'JetBrains Mono', monospace;
-      text-transform: uppercase
-    }
-
-    .sev-critical {
-      background: rgba(220, 38, 38, .08);
-      color: #dc2626;
-      border: 1px solid rgba(220, 38, 38, .2)
-    }
-
-    .sev-high {
-      background: rgba(217, 119, 6, .08);
-      color: #d97706;
-      border: 1px solid rgba(217, 119, 6, .2)
-    }
-
-    .sev-medium {
-      background: rgba(202, 138, 4, .08);
-      color: #ca8a04;
-      border: 1px solid rgba(202, 138, 4, .2)
-    }
-
-    .sev-low {
-      background: rgba(5, 150, 105, .08);
-      color: #059669;
-      border: 1px solid rgba(5, 150, 105, .2)
-    }
-
-    .table-wrapper {
-      overflow-x: auto
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: .72rem;
-      font-family: 'JetBrains Mono', monospace
-    }
-
-    th {
-      background: var(--bg);
-      padding: 10px 12px;
-      text-align: left;
-      font-size: .62rem;
-      font-weight: 700;
-      letter-spacing: .06em;
-      text-transform: uppercase;
-      color: var(--muted);
-      white-space: nowrap;
-      border-bottom: 2px solid var(--border)
-    }
-
-    td {
-      padding: 9px 12px;
-      border-bottom: 1px solid var(--border);
-      max-width: 180px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      color: var(--text)
-    }
-
-    tr:last-child td {
-      border-bottom: none
-    }
-
-    tr:hover td {
-      background: rgba(79, 70, 229, .02)
-    }
-
-    .flag {
-      font-size: 14px
-    }
-
-    .mal-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 3px;
-      padding: 1px 6px;
-      border-radius: 4px;
-      background: rgba(220, 38, 38, .08);
-      color: #dc2626;
-      font-size: .6rem;
-      border: 1px solid rgba(220, 38, 38, .2)
-    }
-
-    .spinner {
-      display: none;
-      width: 18px;
-      height: 18px;
-      border: 2px solid rgba(255, 255, 255, .3);
-      border-top-color: #fff;
-      border-radius: 50%;
-      animation: spin .6s linear infinite
-    }
-
-    @keyframes spin {
-      to {
-        transform: rotate(360deg)
-      }
-    }
-
-    .alert {
-      display: none;
-      padding: 10px 14px;
-      border-radius: 10px;
-      font-size: .78rem;
-      margin-bottom: 14px;
-      font-family: 'JetBrains Mono', monospace
-    }
-
-    .alert-error {
-      background: rgba(220, 38, 38, .06);
-      border: 1px solid rgba(220, 38, 38, .15);
-      color: #dc2626
-    }
-
-    .alert-success {
-      background: rgba(5, 150, 105, .06);
-      border: 1px solid rgba(5, 150, 105, .15);
-      color: #059669
-    }
-
-    .empty-state {
-      text-align: center;
-      padding: 50px 20px;
-      color: var(--muted)
-    }
-
-    .empty-state .ei {
-      font-size: 44px;
-      margin-bottom: 12px;
-      opacity: .3
-    }
-
-    .det-chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      padding: 3px 10px;
-      border-radius: 20px;
-      background: rgba(79, 70, 229, .06);
-      border: 1px solid rgba(79, 70, 229, .15);
-      color: var(--accent);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: .68rem;
-      font-weight: 700
-    }
-
-    .query-grid {
-      display: grid;
-      grid-template-columns: 280px 1fr;
-      gap: 20px
-    }
-
-    .filter-panel {
-      display: flex;
-      flex-direction: column;
-      gap: 12px
-    }
-
-    .kv-stat {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 6px 0;
-      border-bottom: 1px solid var(--border);
-      font-size: .78rem
-    }
-
-    .kv-stat:last-child {
-      border-bottom: none
-    }
-
-    .kv-key {
-      color: var(--muted);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: .7rem
-    }
-
-    .kv-val {
-      font-weight: 700;
-      color: var(--text);
-      font-family: 'JetBrains Mono', monospace
-    }
-
-    @media(max-width:900px) {
-
-      .parse-grid,
-      .query-grid {
-        grid-template-columns: 1fr
-      }
-
-      .stats-row {
-        grid-template-columns: repeat(2, 1fr)
-      }
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SIEM Log Parser</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --white: #ffffff;
+  --gray-50: #f9fafb;
+  --gray-100: #f3f4f6;
+  --gray-200: #e5e7eb;
+  --gray-300: #d1d5db;
+  --gray-400: #9ca3af;
+  --gray-500: #6b7280;
+  --gray-600: #4b5563;
+  --gray-700: #374151;
+  --gray-800: #1f2937;
+  --gray-900: #111827;
+  --blue-50: #eff6ff;
+  --blue-100: #dbeafe;
+  --blue-500: #3b82f6;
+  --blue-600: #2563eb;
+  --blue-700: #1d4ed8;
+  --green-50: #f0fdf4;
+  --green-100: #dcfce7;
+  --green-500: #22c55e;
+  --green-600: #16a34a;
+  --yellow-50: #fefce8;
+  --yellow-500: #eab308;
+  --orange-500: #f97316;
+  --red-50: #fef2f2;
+  --red-100: #fee2e2;
+  --red-500: #ef4444;
+  --red-600: #dc2626;
+  --purple-50: #faf5ff;
+  --purple-500: #a855f7;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.05);
+  --shadow: 0 1px 3px rgba(0,0,0,.1), 0 1px 2px rgba(0,0,0,.06);
+  --shadow-md: 0 4px 6px rgba(0,0,0,.07), 0 2px 4px rgba(0,0,0,.06);
+  --shadow-lg: 0 10px 15px rgba(0,0,0,.1), 0 4px 6px rgba(0,0,0,.05);
+  --radius: 8px;
+  --radius-lg: 12px;
+}
+
+body {
+  background: var(--gray-50);
+  color: var(--gray-900);
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+/* ── HEADER ── */
+header {
+  background: var(--white);
+  border-bottom: 1px solid var(--gray-200);
+  padding: 0 32px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 60px;
+  box-shadow: var(--shadow-sm);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.logo-wrap {
+  width: 36px; height: 36px;
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  border-radius: var(--radius);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.header-title { font-size: 16px; font-weight: 700; color: var(--gray-900); }
+.header-sub { font-size: 12px; color: var(--gray-400); margin-top: 1px; }
+.header-badge {
+  margin-left: auto;
+  background: var(--blue-50);
+  color: var(--blue-600);
+  border: 1px solid var(--blue-100);
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .02em;
+}
+
+/* ── TABS ── */
+.tab-bar {
+  background: var(--white);
+  border-bottom: 1px solid var(--gray-200);
+  padding: 0 32px;
+  display: flex;
+  gap: 0;
+}
+.tab-btn {
+  padding: 14px 20px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--gray-500);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all .15s;
+  white-space: nowrap;
+}
+.tab-btn:hover { color: var(--gray-700); }
+.tab-btn.active { color: var(--blue-600); border-bottom-color: var(--blue-600); font-weight: 600; }
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+
+/* ── LAYOUT ── */
+.page { max-width: 1320px; margin: 0 auto; padding: 28px 24px; }
+
+.two-col { display: grid; grid-template-columns: 340px 1fr; gap: 24px; align-items: start; }
+.sidebar { display: flex; flex-direction: column; gap: 16px; }
+
+/* ── CARD ── */
+.card {
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.card-head {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--gray-100);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.card-head h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gray-700);
+}
+.card-head .icon { font-size: 15px; }
+.card-body { padding: 18px; }
+
+/* ── FORM ELEMENTS ── */
+.field { margin-bottom: 14px; }
+.field:last-child { margin-bottom: 0; }
+.field label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--gray-600);
+  margin-bottom: 5px;
+}
+.field select, .field input[type=text], .field input[type=password] {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--gray-800);
+  background: var(--white);
+  outline: none;
+  transition: border-color .15s, box-shadow .15s;
+  appearance: none;
+}
+.field select:focus, .field input:focus {
+  border-color: var(--blue-500);
+  box-shadow: 0 0 0 3px rgba(59,130,246,.12);
+}
+
+/* ── DROP ZONE ── */
+.drop-zone {
+  border: 2px dashed var(--gray-300);
+  border-radius: var(--radius-lg);
+  padding: 28px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: all .2s;
+  position: relative;
+  background: var(--gray-50);
+}
+.drop-zone:hover, .drop-zone.drag-over {
+  border-color: var(--blue-500);
+  background: var(--blue-50);
+}
+.drop-zone input[type=file] {
+  position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+}
+.drop-icon { font-size: 28px; margin-bottom: 8px; }
+.drop-title { font-size: 13px; font-weight: 500; color: var(--gray-700); }
+.drop-title span { color: var(--blue-600); }
+.drop-hint { font-size: 11px; color: var(--gray-400); margin-top: 4px; font-family: 'JetBrains Mono', monospace; }
+
+.file-pill {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: var(--green-50);
+  border: 1px solid var(--green-100);
+  border-radius: var(--radius);
+  font-size: 12px;
+  color: var(--green-600);
+  font-weight: 500;
+}
+.file-pill .check { font-size: 14px; }
+
+/* ── OUTPUT FORMAT GRID ── */
+.fmt-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 14px; }
+.fmt-tile {
+  padding: 10px 6px;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  text-align: center;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--gray-500);
+  background: var(--white);
+  transition: all .15s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.fmt-tile .fi { font-size: 18px; }
+.fmt-tile:hover { border-color: var(--blue-400); color: var(--blue-600); background: var(--blue-50); }
+.fmt-tile.active {
+  border-color: var(--blue-500);
+  background: var(--blue-50);
+  color: var(--blue-700);
+  font-weight: 600;
+  box-shadow: 0 0 0 3px rgba(59,130,246,.1);
+}
+
+/* ── TOGGLES ── */
+.toggle-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+.toggle-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border: 1px solid var(--gray-200);
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--gray-500);
+  cursor: pointer;
+  background: var(--white);
+  transition: all .15s;
+  user-select: none;
+}
+.toggle-chip:hover { border-color: var(--gray-300); color: var(--gray-700); }
+.toggle-chip.on { border-color: var(--blue-400); background: var(--blue-50); color: var(--blue-700); }
+.toggle-chip input { display: none; }
+
+/* ── BUTTONS ── */
+.btn {
+  display: flex; align-items: center; justify-content: center;
+  gap: 7px; width: 100%; padding: 10px 18px;
+  border: none; border-radius: var(--radius);
+  font-family: inherit; font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all .15s;
+}
+.btn-primary { background: var(--blue-600); color: var(--white); box-shadow: var(--shadow-sm); }
+.btn-primary:hover { background: var(--blue-700); box-shadow: var(--shadow-md); }
+.btn-primary:disabled { opacity: .55; cursor: not-allowed; }
+.btn-ghost {
+  background: transparent; color: var(--gray-600);
+  border: 1px solid var(--gray-200);
+  margin-top: 8px;
+}
+.btn-ghost:hover { background: var(--gray-50); border-color: var(--gray-300); }
+
+/* ── SPINNER ── */
+.spin {
+  display: none; width: 16px; height: 16px;
+  border: 2px solid rgba(255,255,255,.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: rotate .6s linear infinite;
+}
+@keyframes rotate { to { transform: rotate(360deg); } }
+
+/* ── ALERT ── */
+.alert {
+  display: none;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+.alert-err { background: var(--red-50); border: 1px solid var(--red-100); color: var(--red-600); }
+.alert-ok  { background: var(--green-50); border: 1px solid var(--green-100); color: var(--green-600); }
+
+/* ── STAT CARDS ── */
+.stat-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 20px; }
+.stat-box {
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-sm);
+}
+.stat-num { font-size: 26px; font-weight: 700; line-height: 1; font-family: 'JetBrains Mono', monospace; }
+.stat-lbl { font-size: 11px; color: var(--gray-400); text-transform: uppercase; letter-spacing: .05em; margin-top: 4px; font-weight: 500; }
+.c-blue { color: var(--blue-600); }
+.c-red  { color: var(--red-500); }
+.c-orange { color: var(--orange-500); }
+.c-green { color: var(--green-500); }
+.c-purple { color: var(--purple-500); }
+
+/* ── DETECTED FORMAT BADGE ── */
+.det-bar {
+  display: none;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.det-chip {
+  padding: 3px 10px;
+  background: var(--purple-50);
+  border: 1px solid #e9d5ff;
+  color: var(--purple-500);
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: 'JetBrains Mono', monospace;
+}
+.det-count { font-size: 12px; color: var(--gray-400); }
+
+/* ── TABLE ── */
+.tbl-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; font-family: 'JetBrains Mono', monospace; }
+thead tr { background: var(--gray-50); border-bottom: 1px solid var(--gray-200); }
+th {
+  padding: 9px 12px; text-align: left;
+  font-size: 11px; font-weight: 600;
+  color: var(--gray-500); letter-spacing: .04em;
+  white-space: nowrap; text-transform: uppercase;
+}
+td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--gray-100);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--gray-700);
+  font-family: 'JetBrains Mono', monospace;
+}
+tbody tr:hover td { background: var(--gray-50); }
+tbody tr:last-child td { border-bottom: none; }
+
+/* ── SEVERITY BADGES ── */
+.sev {
+  display: inline-block; padding: 2px 8px; border-radius: 20px;
+  font-size: 10px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .04em; font-family: 'Inter', sans-serif;
+}
+.sev-critical { background: var(--red-100); color: var(--red-600); }
+.sev-high { background: #fff7ed; color: var(--orange-500); border: 1px solid #fed7aa; }
+.sev-medium { background: var(--yellow-50); color: #a16207; border: 1px solid #fde68a; }
+.sev-low { background: var(--green-100); color: var(--green-600); }
+
+/* ── EMPTY STATE ── */
+.empty {
+  text-align: center; padding: 60px 20px; color: var(--gray-400);
+}
+.empty-icon { font-size: 40px; margin-bottom: 12px; opacity: .5; }
+.empty p { font-size: 13px; line-height: 1.6; }
+.empty strong { color: var(--gray-600); }
+
+/* ── QUERY TAB ── */
+.query-grid { display: grid; grid-template-columns: 280px 1fr; gap: 24px; }
+.kv { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--gray-100); font-size: 12px; }
+.kv:last-child { border-bottom: none; }
+.kv-k { color: var(--gray-500); }
+.kv-v { font-weight: 600; color: var(--gray-800); font-family: 'JetBrains Mono', monospace; }
+.session-item { padding: 8px 0; border-bottom: 1px solid var(--gray-100); font-size: 12px; }
+.session-item:last-child { border-bottom: none; }
+.session-id { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--blue-600); font-weight: 600; }
+.session-meta { color: var(--gray-400); font-size: 11px; margin-top: 2px; }
+.btn-danger { background: var(--red-600); color: var(--white); margin-top: 8px; }
+.btn-danger:hover { background: #b91c1c; }
+
+/* ── RESPONSIVE ── */
+@media (max-width: 900px) {
+  .two-col, .query-grid { grid-template-columns: 1fr; }
+  .stat-row { grid-template-columns: repeat(2, 1fr); }
+  header { padding: 0 16px; }
+  .tab-bar { padding: 0 16px; }
+  .page { padding: 16px; }
+}
+</style>
 </head>
-
 <body>
-  <header>
-    <div class="logo">🛡</div>
-    <div>
-      <h1>SIEM Log Parser</h1>
-      <div class="subtitle">v3.0 · GeoIP Enrichment · SQLite Storage · 8 Input Formats</div>
+
+<header>
+  <div class="logo-wrap">🛡</div>
+  <div>
+    <div class="header-title">SIEM Log Parser</div>
+    <div class="header-sub">Universal Log Normalization Pipeline</div>
+  </div>
+  <div class="header-badge">v3.0 · 8 Formats · GeoIP · SQLite</div>
+</header>
+
+<div class="tab-bar">
+  <div class="tab-btn active" onclick="switchTab('parse')">⚡ Parse &amp; Export</div>
+  <div class="tab-btn" onclick="switchTab('query')">🗃 Stored Events</div>
+</div>
+
+<!-- ══════════ PARSE TAB ══════════ -->
+<div id="tab-parse" class="tab-pane active">
+<div class="page">
+<div class="two-col">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+
+    <!-- Upload -->
+    <div class="card">
+      <div class="card-head"><span class="icon">📂</span><h3>Input Log File</h3></div>
+      <div class="card-body">
+        <div class="drop-zone" id="dropZone">
+          <input type="file" id="fileInput" accept=".log,.txt,.json,.xml,.evtx,.cef,.leef,.syslog,.aws">
+          <div class="drop-icon">☁</div>
+          <div class="drop-title"><span>Click to upload</span> or drag &amp; drop</div>
+          <div class="drop-hint">syslog · cef · leef · json · evtx · aws · nginx · zeek</div>
+        </div>
+        <div class="file-pill" id="filePill">
+          <span class="check">✓</span>
+          <span id="fileName">—</span>
+        </div>
+        <div class="field" style="margin-top:12px">
+          <label>Source Format</label>
+          <select id="inputFormat">
+            <option value="auto">Auto-Detect</option>
+            <option value="syslog">Syslog (RFC 5424 / 3164)</option>
+            <option value="cef">CEF — ArcSight</option>
+            <option value="leef">LEEF — IBM QRadar</option>
+            <option value="json">JSON / NDJSON / ECS</option>
+            <option value="evtx">Windows Event Log</option>
+            <option value="aws_cloudtrail">AWS CloudTrail</option>
+            <option value="nginx">Nginx / Apache</option>
+            <option value="zeek">Zeek Network Logs</option>
+          </select>
+        </div>
+        <button class="btn btn-ghost" onclick="loadSample()" style="font-size:12px;padding:8px 14px">
+          📋 Load Sample Logs
+        </button>
+      </div>
     </div>
-    <div class="badge">v3.0 · PHASE 1</div>
-  </header>
 
-  <div class="tabs">
-    <div class="tab active" onclick="switchTab('parse')">⚡ Parse &amp; Export</div>
-    <div class="tab" onclick="switchTab('query')">🗃 Stored Events</div>
-  </div>
-
-  <!-- ═══ PARSE TAB ═══ -->
-  <div id="tab-parse" class="tab-content active">
-    <main>
-      <div class="parse-grid">
-        <div class="left-panel">
-          <div class="card">
-            <div class="card-header"><span>📂</span>
-              <h2>Input</h2>
-            </div>
-            <div class="card-body">
-              <div class="drop-zone" id="dropZone">
-                <input type="file" id="fileInput" accept=".log,.txt,.json,.xml,.evtx,.cef,.leef,.syslog,.aws">
-                <div class="drop-icon">⬆</div>
-                <div class="drop-text"><strong>Click or drag</strong> a log file</div>
-                <div class="drop-hint">syslog · cef · leef · json · evtx · aws · nginx · zeek</div>
-              </div>
-              <div class="file-chosen" id="fileChosen"><span>✓</span><span id="fileName">—</span></div>
-              <div class="form-row" style="margin-top:12px">
-                <label>Source Format</label>
-                <select id="inputFormat">
-                  <option value="auto">🤖 Auto-Detect</option>
-                  <option value="syslog">Syslog (RFC 5424/3164)</option>
-                  <option value="cef">CEF — ArcSight</option>
-                  <option value="leef">LEEF — IBM QRadar</option>
-                  <option value="json">JSON / NDJSON / ECS</option>
-                  <option value="evtx">Windows Event Log</option>
-                  <option value="aws_cloudtrail">AWS CloudTrail</option>
-                  <option value="nginx">Nginx / Apache</option>
-                  <option value="zeek">Zeek Network Logs</option>
-                </select>
-              </div>
-              <button class="btn btn-secondary" style="margin-top:4px" onclick="loadSample()">📋 Load Sample</button>
-            </div>
+    <!-- Enrichment -->
+    <div class="card">
+      <div class="card-head"><span class="icon">✨</span><h3>Enrichment Options</h3></div>
+      <div class="card-body">
+        <div class="toggle-row">
+          <div class="toggle-chip on" id="chip-geoip" onclick="toggleChip('geoip','doGeoip')">
+            <input type="checkbox" id="doGeoip" checked> 🌍 GeoIP
           </div>
-
-          <div class="card">
-            <div class="card-header"><span>✨</span>
-              <h2>Enrichment</h2>
-            </div>
-            <div class="card-body">
-              <div class="enrich-row">
-                <label class="toggle-pill active" id="pill-geoip">
-                  <input type="checkbox" id="doGeoip" checked onchange="updatePill('geoip')">
-                  🌍 GeoIP
-                </label>
-                <label class="toggle-pill" id="pill-store">
-                  <input type="checkbox" id="doStore" onchange="updatePill('store')">
-                  🗃 Store
-                </label>
-                <label class="toggle-pill" id="pill-dns">
-                  <input type="checkbox" id="doDns" onchange="updatePill('dns')">
-                  🔍 rDNS
-                </label>
-              </div>
-              <div class="form-row" id="abuseRow">
-                <label>AbuseIPDB Key <span style="color:var(--muted);font-size:.65rem">(optional)</span></label>
-                <input type="text" id="abuseKey" placeholder="Paste key for threat intel enrichment">
-              </div>
-            </div>
+          <div class="toggle-chip" id="chip-store" onclick="toggleChip('store','doStore')">
+            <input type="checkbox" id="doStore"> 🗃 Store
           </div>
-
-          <div class="card">
-            <div class="card-header"><span>📤</span>
-              <h2>Output</h2>
-            </div>
-            <div class="card-body">
-              <div class="fmt-grid">
-                <button class="fmt-btn active" onclick="selFmt(this,'json')"><span class="fi">{ }</span>JSON</button>
-                <button class="fmt-btn" onclick="selFmt(this,'csv')"><span class="fi">📊</span>CSV</button>
-                <button class="fmt-btn" onclick="selFmt(this,'excel')"><span class="fi">📗</span>Excel</button>
-                <button class="fmt-btn" onclick="selFmt(this,'ndjson')"><span class="fi">⬡</span>NDJSON</button>
-                <button class="fmt-btn" onclick="selFmt(this,'elasticsearch')"><span
-                    class="fi">🔎</span>Elastic</button>
-                <button class="fmt-btn" onclick="selFmt(this,'splunk')"><span class="fi">🟢</span>Splunk</button>
-                <button class="fmt-btn" onclick="selFmt(this,'stix')" style="grid-column:span 2"><span
-                    class="fi">🔗</span>STIX 2.1</button>
-              </div>
-              <div id="esRow" class="form-row" style="display:none">
-                <label>Elasticsearch Index</label>
-                <input type="text" id="esIndex" value="siem-logs">
-              </div>
-              <button class="btn btn-primary" id="parseBtn" onclick="parseLogs()">
-                <span class="spinner" id="spinner"></span>
-                <span id="btnText">▶ Parse &amp; Download</span>
-              </button>
-              <button class="btn btn-secondary" onclick="previewLogs()">👁 Preview</button>
-            </div>
+          <div class="toggle-chip" id="chip-dns" onclick="toggleChip('dns','doDns')">
+            <input type="checkbox" id="doDns"> 🔍 rDNS
           </div>
         </div>
+        <div class="field">
+          <label>AbuseIPDB Key <span style="color:var(--gray-400);font-weight:400">(optional — threat intel)</span></label>
+          <input type="text" id="abuseKey" placeholder="Paste API key for malicious IP detection">
+        </div>
+        <p style="font-size:11px;color:var(--gray-400);margin-top:-6px;line-height:1.5">
+          GeoIP adds country &amp; city to each event using public IPs. Private IPs (10.x, 192.168.x) are skipped.
+        </p>
+      </div>
+    </div>
 
-        <!-- RIGHT PANEL -->
-        <div>
-          <div id="alert" class="alert"></div>
-          <div class="stats-row" id="statsRow" style="display:none">
-            <div class="stat-card">
-              <div class="stat-val" id="stTotal">0</div>
-              <div class="stat-label">Total</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-val" style="color:var(--danger)" id="stCrit">0</div>
-              <div class="stat-label">Critical</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-val" style="color:var(--warn)" id="stHigh">0</div>
-              <div class="stat-label">High</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-val" style="color:var(--accent3)" id="stGeo">0</div>
-              <div class="stat-label">GeoIP'd</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-val" style="color:var(--danger)" id="stMal">0</div>
-              <div class="stat-label">Malicious</div>
-            </div>
-          </div>
-          <div id="detRow" style="display:none;margin-bottom:14px;align-items:center;gap:10px;flex-wrap:wrap">
-            <span style="font-size:.72rem;color:var(--muted)">Detected:</span>
-            <span class="det-chip" id="detFmt">—</span>
-            <span style="font-size:.72rem;color:var(--muted)" id="evtCount"></span>
-          </div>
-          <div class="card">
-            <div class="card-header"><span>📋</span>
-              <h2>Parsed Events Preview</h2>
-            </div>
-            <div id="tableContainer">
-              <div class="empty-state">
-                <div class="ei">🛡</div>
-                <p>Upload a log file or load a sample to get started</p>
-              </div>
-            </div>
-          </div>
+    <!-- Output Format -->
+    <div class="card">
+      <div class="card-head"><span class="icon">📤</span><h3>Output Format</h3></div>
+      <div class="card-body">
+        <div class="fmt-grid">
+          <div class="fmt-tile active" onclick="selFmt(this,'json')"><span class="fi">{ }</span>JSON</div>
+          <div class="fmt-tile" onclick="selFmt(this,'csv')"><span class="fi">📊</span>CSV</div>
+          <div class="fmt-tile" onclick="selFmt(this,'excel')"><span class="fi">📗</span>Excel</div>
+          <div class="fmt-tile" onclick="selFmt(this,'ndjson')"><span class="fi">≡</span>NDJSON</div>
+          <div class="fmt-tile" onclick="selFmt(this,'elasticsearch')"><span class="fi">🔎</span>Elastic</div>
+          <div class="fmt-tile" onclick="selFmt(this,'splunk')"><span class="fi">🟢</span>Splunk</div>
+          <div class="fmt-tile" onclick="selFmt(this,'stix')" style="grid-column:span 3"><span class="fi">🔗</span>STIX 2.1</div>
+        </div>
+        <div class="field" id="esField" style="display:none">
+          <label>Elasticsearch Index Name</label>
+          <input type="text" id="esIndex" value="siem-logs">
+        </div>
+        <button class="btn btn-primary" id="parseBtn" onclick="parseLogs()">
+          <div class="spin" id="spin"></div>
+          <span id="btnLbl">▶ Parse &amp; Download</span>
+        </button>
+        <button class="btn btn-ghost" onclick="previewLogs()">👁 Preview Only</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN PANEL -->
+  <div>
+    <div class="alert" id="alert"></div>
+
+    <!-- Stats -->
+    <div class="stat-row" id="statRow" style="display:none">
+      <div class="stat-box">
+        <div class="stat-num c-blue" id="stTotal">0</div>
+        <div class="stat-lbl">Total Events</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num c-red" id="stCrit">0</div>
+        <div class="stat-lbl">Critical</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num c-orange" id="stHigh">0</div>
+        <div class="stat-lbl">High</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num c-green" id="stGeo">0</div>
+        <div class="stat-lbl">GeoIP'd</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num c-red" id="stMal">0</div>
+        <div class="stat-lbl">Malicious</div>
+      </div>
+    </div>
+
+    <!-- Detected format bar -->
+    <div class="det-bar" id="detBar">
+      <span style="font-size:12px;color:var(--gray-400)">Detected format:</span>
+      <span class="det-chip" id="detFmt">—</span>
+      <span class="det-count" id="evtCount"></span>
+    </div>
+
+    <!-- Events table -->
+    <div class="card">
+      <div class="card-head"><span class="icon">📋</span><h3>Parsed Events</h3></div>
+      <div id="tableWrap">
+        <div class="empty">
+          <div class="empty-icon">🛡</div>
+          <p>Upload a log file or click <strong>Load Sample Logs</strong>,<br>then click <strong>Preview Only</strong> or <strong>Parse &amp; Download</strong>.</p>
         </div>
       </div>
-    </main>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+
+<!-- ══════════ QUERY TAB ══════════ -->
+<div id="tab-query" class="tab-pane">
+<div class="page">
+<div class="query-grid">
+
+  <!-- LEFT: filters + stats -->
+  <div style="display:flex;flex-direction:column;gap:16px">
+
+    <div class="card">
+      <div class="card-head"><span class="icon">📊</span><h3>Database Summary</h3></div>
+      <div class="card-body" id="dbSummary">
+        <p style="font-size:12px;color:var(--gray-400)">Loading…</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span class="icon">🔎</span><h3>Filter Events</h3></div>
+      <div class="card-body">
+        <div class="field">
+          <label>Severity</label>
+          <select id="qSev">
+            <option value="">All severities</option>
+            <option value="critical">Critical</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Source IP</label>
+          <input type="text" id="qIp" placeholder="e.g. 192.168.1.">
+        </div>
+        <div class="field">
+          <label>Username</label>
+          <input type="text" id="qUser" placeholder="e.g. admin">
+        </div>
+        <div class="field">
+          <label>Country</label>
+          <input type="text" id="qCountry" placeholder="e.g. China">
+        </div>
+        <div class="field">
+          <label>Search Message</label>
+          <input type="text" id="qSearch" placeholder="keyword…">
+        </div>
+        <div class="field">
+          <label>Session ID</label>
+          <input type="text" id="qSession" placeholder="e.g. a1b2c3d4">
+        </div>
+        <label class="toggle-chip" id="chip-mal" onclick="toggleChip('mal','qMal')" style="margin-bottom:14px">
+          <input type="checkbox" id="qMal"> ⚠ Malicious IPs only
+        </label>
+        <button class="btn btn-primary" onclick="runQuery()">🔍 Search Events</button>
+        <button class="btn btn-danger" onclick="clearDb()">🗑 Clear All Events</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span class="icon">📁</span><h3>Recent Sessions</h3></div>
+      <div class="card-body" id="sessionsPanel">
+        <p style="font-size:12px;color:var(--gray-400)">No sessions yet. Parse and enable Store.</p>
+      </div>
+    </div>
   </div>
 
-  <!-- ═══ QUERY TAB ═══ -->
-  <div id="tab-query" class="tab-content">
-    <main>
-      <div class="query-grid">
-        <div class="filter-panel">
-          <div class="card">
-            <div class="card-header"><span>📊</span>
-              <h2>DB Stats</h2>
-            </div>
-            <div class="card-body" id="dbStatsPanel">
-              <div style="color:var(--muted);font-size:.78rem">Loading...</div>
-            </div>
-          </div>
-          <div class="card">
-            <div class="card-header"><span>🔎</span>
-              <h2>Filters</h2>
-            </div>
-            <div class="card-body">
-              <div class="form-row"><label>Severity</label>
-                <select id="qSeverity">
-                  <option value="">All</option>
-                  <option>critical</option>
-                  <option>high</option>
-                  <option>medium</option>
-                  <option>low</option>
-                </select>
-              </div>
-              <div class="form-row"><label>Source IP</label>
-                <input type="text" id="qIp" placeholder="e.g. 192.168.1.">
-              </div>
-              <div class="form-row"><label>Username</label>
-                <input type="text" id="qUser" placeholder="e.g. admin">
-              </div>
-              <div class="form-row"><label>Country</label>
-                <input type="text" id="qCountry" placeholder="e.g. China">
-              </div>
-              <div class="form-row"><label>Search Message</label>
-                <input type="text" id="qSearch" placeholder="keyword...">
-              </div>
-              <div class="form-row"><label>Session ID</label>
-                <input type="text" id="qSession" placeholder="e.g. a1b2c3d4">
-              </div>
-              <label class="toggle-pill" id="pill-mal" style="margin-bottom:12px">
-                <input type="checkbox" id="qMalicious" onchange="updatePill('mal')">
-                ⚠ Malicious IPs only
-              </label>
-              <button class="btn btn-primary" onclick="runQuery()" style="margin-top:4px">🔍 Query</button>
-              <button class="btn btn-secondary" onclick="clearDb()">🗑 Clear All Events</button>
-            </div>
-          </div>
-        </div>
-        <div>
-          <div id="queryAlert" class="alert"></div>
-          <div class="card">
-            <div class="card-header"><span>📋</span>
-              <h2>Query Results</h2>
-            </div>
-            <div id="queryResults">
-              <div class="empty-state">
-                <div class="ei">🗃</div>
-                <p>Run a query to see stored events<br><small>Events are saved when you check <strong>Store</strong> on
-                    the Parse tab</small></p>
-              </div>
-            </div>
-          </div>
+  <!-- RIGHT: results -->
+  <div>
+    <div class="alert" id="qAlert"></div>
+    <div class="card">
+      <div class="card-head"><span class="icon">📋</span><h3>Query Results</h3></div>
+      <div id="qResults">
+        <div class="empty">
+          <div class="empty-icon">🗃</div>
+          <p>Events appear here after you search.<br><strong>Tip:</strong> Parse a file with <strong>Store</strong> enabled first,<br>then come back to query.</p>
         </div>
       </div>
-    </main>
+    </div>
   </div>
 
-  <script>
-    let selFmtVal = 'json', selFile = null, pastedContent = null;
-    const FLAGS = { CN: '🇨🇳', US: '🇺🇸', RU: '🇷🇺', DE: '🇩🇪', GB: '🇬🇧', FR: '🇫🇷', JP: '🇯🇵', IN: '🇮🇳', BR: '🇧🇷', KR: '🇰🇷', CA: '🇨🇦', AU: '🇦🇺', NL: '🇳🇱', SE: '🇸🇪', SG: '🇸🇬' };
+</div>
+</div>
+</div>
 
-    function switchTab(name) {
-      document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', ['parse', 'query'][i] === name));
-      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-      document.getElementById('tab-' + name).classList.add('active');
-      if (name === 'query') loadDbStats();
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let selFmtVal = 'json';
+let selFile = null;
+let pastedContent = null;
+
+const FLAGS = {CN:'🇨🇳',US:'🇺🇸',RU:'🇷🇺',DE:'🇩🇪',GB:'🇬🇧',FR:'🇫🇷',JP:'🇯🇵',IN:'🇮🇳',
+               BR:'🇧🇷',KR:'🇰🇷',CA:'🇨🇦',AU:'🇦🇺',NL:'🇳🇱',SE:'🇸🇪',SG:'🇸🇬',NG:'🇳🇬',
+               UA:'🇺🇦',PL:'🇵🇱',TR:'🇹🇷',ID:'🇮🇩',VN:'🇻🇳',TH:'🇹🇭',PK:'🇵🇰'};
+
+// ── Tabs ───────────────────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach((t,i) =>
+    t.classList.toggle('active', ['parse','query'][i] === name));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  if (name === 'query') loadDbStats();
+}
+
+// ── Toggle chips ───────────────────────────────────────────────────────────
+function toggleChip(name, cbId) {
+  const cb = document.getElementById(cbId);
+  cb.checked = !cb.checked;
+  document.getElementById('chip-' + name)?.classList.toggle('on', cb.checked);
+}
+
+// ── Format selector ────────────────────────────────────────────────────────
+function selFmt(el, fmt) {
+  document.querySelectorAll('.fmt-tile').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  selFmtVal = fmt;
+  document.getElementById('esField').style.display = fmt === 'elasticsearch' ? 'block' : 'none';
+}
+
+// ── Drop zone ──────────────────────────────────────────────────────────────
+const dz = document.getElementById('dropZone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
+});
+document.getElementById('fileInput').addEventListener('change', e => {
+  if (e.target.files[0]) setFile(e.target.files[0]);
+});
+function setFile(f) {
+  selFile = f; pastedContent = null;
+  document.getElementById('fileName').textContent = f.name + ' (' + (f.size/1024).toFixed(1) + ' KB)';
+  document.getElementById('filePill').style.display = 'flex';
+}
+
+// ── Alerts ─────────────────────────────────────────────────────────────────
+function showAlert(msg, type='err', elId='alert') {
+  const el = document.getElementById(elId);
+  el.className = 'alert alert-' + type;
+  el.textContent = msg;
+  el.style.display = 'block';
+  setTimeout(() => el.style.display = 'none', 6000);
+}
+
+// ── Load sample ────────────────────────────────────────────────────────────
+async function loadSample() {
+  const fmt = document.getElementById('inputFormat').value;
+  const f = fmt === 'auto' ? 'syslog' : fmt;
+  try {
+    const r = await fetch('/api/sample/' + f);
+    if (!r.ok) throw new Error('No sample for: ' + f);
+    pastedContent = await r.text();
+    selFile = null;
+    document.getElementById('fileName').textContent = 'Sample: ' + f + ' (' + pastedContent.split('\n').length + ' lines)';
+    document.getElementById('filePill').style.display = 'flex';
+    showAlert('Sample ' + f + ' logs loaded. Click Preview or Parse & Download.', 'ok');
+  } catch(e) { showAlert('Could not load sample: ' + e.message); }
+}
+
+// ── Preview ────────────────────────────────────────────────────────────────
+async function previewLogs() {
+  const content = pastedContent || (selFile ? await selFile.text() : null);
+  if (!content) { showAlert('Upload a file or load sample logs first.'); return; }
+  const enrich = document.getElementById('doGeoip').checked;
+  try {
+    const r = await fetch('/api/parse/text', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content, input_format: document.getElementById('inputFormat').value, enrich })
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || JSON.stringify(data));
+    renderPreview(data);
+  } catch(e) { showAlert('Preview error: ' + e.message); }
+}
+
+// ── Render preview ─────────────────────────────────────────────────────────
+function renderPreview(data) {
+  const evts = data.events || [];
+  const s = { critical:0, high:0, medium:0, low:0 };
+  let geo = 0, mal = 0;
+  evts.forEach(e => {
+    const k = (e.severity||'low').toLowerCase();
+    if (s[k] !== undefined) s[k]++; else s.low++;
+    if (e.geo_country) geo++;
+    if (e.is_malicious) mal++;
+  });
+  document.getElementById('stTotal').textContent = data.total_events;
+  document.getElementById('stCrit').textContent = s.critical;
+  document.getElementById('stHigh').textContent = s.high;
+  document.getElementById('stGeo').textContent = geo;
+  document.getElementById('stMal').textContent = mal;
+  document.getElementById('statRow').style.display = 'grid';
+  const db = document.getElementById('detBar');
+  db.style.display = 'flex';
+  document.getElementById('detFmt').textContent = data.detected_format || data.used_format;
+  document.getElementById('evtCount').textContent = 'Showing ' + evts.length + ' of ' + data.total_events + ' events';
+  renderTable(evts, 'tableWrap');
+}
+
+// ── Render table ───────────────────────────────────────────────────────────
+function renderTable(evts, containerId) {
+  if (!evts.length) {
+    document.getElementById(containerId).innerHTML = '<div class="empty"><div class="empty-icon">📭</div><p>No events found.</p></div>';
+    return;
+  }
+  const showGeo = evts.some(e => e.geo_country);
+  const cols = ['timestamp','severity','source_format','source_ip','dest_ip','event_type','event_action','username','message'];
+  if (showGeo) cols.splice(4, 0, 'geo_country', 'geo_city');
+  let html = '<div class="tbl-wrap"><table><thead><tr>';
+  cols.forEach(c => html += '<th>' + c.replace(/_/g,' ') + '</th>');
+  if (evts.some(e => e.is_malicious)) html += '<th>threat</th>';
+  html += '</tr></thead><tbody>';
+  evts.forEach(evt => {
+    html += '<tr>';
+    cols.forEach(c => {
+      let val = evt[c] || '';
+      if (c === 'severity' && val) {
+        html += '<td><span class="sev sev-' + val.toLowerCase() + '">' + val + '</span></td>';
+        return;
+      }
+      if (c === 'geo_country' && val) {
+        const code = evt.geo_country_code || '';
+        const flag = FLAGS[code] || '🌐';
+        html += '<td title="' + val + '">' + flag + ' ' + val + '</td>';
+        return;
+      }
+      const s = String(val).substring(0, 55) + (String(val).length > 55 ? '…' : '');
+      html += '<td title="' + String(evt[c]||'').replace(/"/g,'&quot;') + '">'
+            + s.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</td>';
+    });
+    if (evts.some(e => e.is_malicious)) {
+      html += evt.is_malicious
+        ? '<td><span class="sev sev-critical">⚠ malicious</span></td>'
+        : '<td></td>';
     }
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  document.getElementById(containerId).innerHTML = html;
+}
 
-    function updatePill(name) {
-      const map = { geoip: 'doGeoip', store: 'doStore', dns: 'doDns', mal: 'qMalicious' };
-      const pill = document.getElementById('pill-' + name);
-      const checked = document.getElementById(map[name]).checked;
-      if (pill) pill.classList.toggle('active', checked);
-    }
+// ── Parse & Download ───────────────────────────────────────────────────────
+async function parseLogs() {
+  if (!selFile && !pastedContent) { showAlert('Upload a file or load sample logs first.'); return; }
+  const btn = document.getElementById('parseBtn');
+  btn.disabled = true;
+  document.getElementById('spin').style.display = 'block';
+  document.getElementById('btnLbl').textContent = 'Processing…';
+  try {
+    const doEnrich = document.getElementById('doGeoip').checked;
+    const doStore  = document.getElementById('doStore').checked;
+    const doDns    = document.getElementById('doDns').checked;
+    const abuseKey = document.getElementById('abuseKey').value.trim();
 
-    const dz = document.getElementById('dropZone');
-    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over') });
-    dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
-    dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag-over'); if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]) });
-    document.getElementById('fileInput').addEventListener('change', e => { if (e.target.files[0]) setFile(e.target.files[0]) });
-    function setFile(f) { selFile = f; pastedContent = null; document.getElementById('fileName').textContent = f.name + ` (${(f.size / 1024).toFixed(1)} KB)`; document.getElementById('fileChosen').style.display = 'flex' }
-    function selFmt(btn, fmt) { document.querySelectorAll('.fmt-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active'); selFmtVal = fmt; document.getElementById('esRow').style.display = fmt === 'elasticsearch' ? 'block' : 'none'; const p = document.getElementById('parseBtn'); p.style.transform = 'scale(1.04)'; setTimeout(() => p.style.transform = 'none', 200) }
-
-    function showAlert(msg, type = 'error', elId = 'alert') {
-      const el = document.getElementById(elId); el.className = `alert alert-${type}`; el.textContent = msg; el.style.display = 'block';
-      setTimeout(() => el.style.display = 'none', 6000);
-    }
-
-    async function loadSample() {
-      const fmt = document.getElementById('inputFormat').value, f = fmt === 'auto' ? 'syslog' : fmt;
-      try {
-        const r = await fetch(`/api/sample/${f}`); if (!r.ok) throw new Error(await r.text());
-        pastedContent = await r.text(); selFile = null;
-        document.getElementById('fileName').textContent = `Sample: ${f}`;
-        document.getElementById('fileChosen').style.display = 'flex';
-        showAlert(`Loaded sample ${f}`, 'success');
-      } catch (e) { showAlert('Could not load sample: ' + e.message) }
-    }
-
-    async function previewLogs() {
-      let content = pastedContent;
-      if (!content && !selFile) { showAlert('Upload a file or load a sample first.'); return }
-      if (!content) content = await selFile.text();
-      const enrich = document.getElementById('doGeoip').checked;
-      try {
-        const r = await fetch('/api/parse/text', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content, input_format: document.getElementById('inputFormat').value, enrich })
-        });
-        const data = await r.json(); if (!r.ok) throw new Error(data.detail || JSON.stringify(data));
-        renderPreview(data);
-      } catch (e) { showAlert('Error: ' + e.message) }
-    }
-
-    function renderPreview(data) {
-      const evts = data.events || [];
-      const s = { critical: 0, high: 0, medium: 0, low: 0 };
-      let geo = 0, mal = 0;
-      evts.forEach(e => { const k = (e.severity || 'low').toLowerCase(); if (s[k] !== undefined) s[k]++; else s.low++; if (e.geo_country) geo++; if (e.is_malicious) mal++; });
-      document.getElementById('stTotal').textContent = data.total_events;
-      document.getElementById('stCrit').textContent = s.critical;
-      document.getElementById('stHigh').textContent = s.high;
-      document.getElementById('stGeo').textContent = geo;
-      document.getElementById('stMal').textContent = mal;
-      document.getElementById('statsRow').style.display = 'grid';
-      const dr = document.getElementById('detRow'); dr.style.display = 'flex';
-      document.getElementById('detFmt').textContent = data.detected_format || data.used_format;
-      document.getElementById('evtCount').textContent = `Showing ${evts.length} of ${data.total_events} events`;
-      renderTable(evts, 'tableContainer');
-    }
-
-    function renderTable(evts, containerId) {
-      const showGeo = evts.some(e => e.geo_country);
-      const cols = ['timestamp', 'severity', 'source_format', 'source_ip', 'dest_ip', 'event_type', 'event_action', 'username', 'message'];
-      if (showGeo) cols.splice(4, 0, 'geo_country', 'geo_city');
-      let html = '<div class="table-wrapper"><table><thead><tr>';
-      cols.forEach(c => html += `<th>${c.replace(/_/g, ' ')}</th>`);
-      if (evts.some(e => e.is_malicious)) html += '<th>threat</th>';
-      html += '</tr></thead><tbody>';
-      evts.forEach(evt => {
-        html += '<tr>';
-        cols.forEach(c => {
-          let val = evt[c] || '';
-          if (c === 'severity' && val) { html += `<td><span class="sev sev-${val.toLowerCase()}">${val}</span></td>`; return }
-          if (c === 'geo_country' && val) { const flag = FLAGS[evt.geo_country_code] || '🌐'; html += `<td title="${val}">${flag} ${val}</td>`; return }
-          const s = String(val).substring(0, 55) + (String(val).length > 55 ? '…' : '');
-          html += `<td title="${String(evt[c] || '').replace(/"/g, '&quot;')}">${s.replace(/</g, '&lt;')}</td>`;
-        });
-        if (evts.some(e => e.is_malicious)) {
-          html += evt.is_malicious ? '<td><span class="mal-badge">⚠ malicious</span></td>' : '<td></td>';
-        }
-        html += '</tr>';
+    // If we have a real file → use multipart upload
+    if (selFile) {
+      const fd = new FormData();
+      fd.append('file', selFile);
+      fd.append('input_format', document.getElementById('inputFormat').value);
+      fd.append('output_format', selFmtVal);
+      fd.append('es_index', document.getElementById('esIndex').value);
+      fd.append('do_enrich', doEnrich ? 'true' : 'false');
+      fd.append('do_store',  doStore  ? 'true' : 'false');
+      fd.append('do_dns',    doDns    ? 'true' : 'false');
+      fd.append('abuseipdb_key', abuseKey);
+      fd.append('preview_only', 'false');
+      const r = await fetch('/api/parse', { method: 'POST', body: fd });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({ detail: r.statusText }));
+        throw new Error(err.detail || 'Parse failed');
+      }
+      const blob = await r.blob();
+      triggerDownload(blob, r.headers.get('Content-Disposition'));
+      await previewLogs();
+      const stored = doStore ? ' Events saved to database.' : '';
+      showAlert('✓ File downloaded successfully.' + stored, 'ok');
+    } else {
+      // Sample/pasted content → use /api/export/text endpoint
+      const r = await fetch('/api/export/text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: pastedContent,
+          input_format: document.getElementById('inputFormat').value,
+          output_format: selFmtVal,
+          enrich: doEnrich,
+          es_index: document.getElementById('esIndex').value,
+        })
       });
-      html += '</tbody></table></div>';
-      document.getElementById(containerId).innerHTML = html;
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({ detail: r.statusText }));
+        throw new Error(err.detail || 'Export failed');
+      }
+      const blob = await r.blob();
+      triggerDownload(blob, r.headers.get('Content-Disposition'));
+      await previewLogs();
+      showAlert('✓ File downloaded successfully.', 'ok');
     }
+  } catch(e) {
+    showAlert('Error: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    document.getElementById('spin').style.display = 'none';
+    document.getElementById('btnLbl').textContent = '▶ Parse & Download';
+  }
+}
 
-    async function parseLogs() {
-      if (!selFile && !pastedContent) { showAlert('Upload a file or load a sample first.'); return }
-      const btn = document.getElementById('parseBtn');
-      btn.disabled = true; document.getElementById('spinner').style.display = 'block'; document.getElementById('btnText').textContent = 'Parsing…';
-      try {
-        if (pastedContent && !selFile) { await previewLogs(); showAlert('Preview shown. Upload a real file to download.', 'success'); return }
-        const fd = new FormData();
-        fd.append('file', selFile);
-        fd.append('input_format', document.getElementById('inputFormat').value);
-        fd.append('output_format', selFmtVal);
-        fd.append('es_index', document.getElementById('esIndex').value);
-        fd.append('do_enrich', document.getElementById('doGeoip').checked ? 'true' : 'false');
-        fd.append('do_store', document.getElementById('doStore').checked ? 'true' : 'false');
-        fd.append('do_dns', document.getElementById('doDns').checked ? 'true' : 'false');
-        fd.append('abuseipdb_key', document.getElementById('abuseKey').value);
-        fd.append('preview_only', 'false');
-        const r = await fetch('/api/parse', { method: 'POST', body: fd });
-        if (!r.ok) { const err = await r.json().catch(() => ({ detail: r.statusText })); throw new Error(err.detail || 'Parse failed') }
-        const blob = await r.blob(); const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        const cd = r.headers.get('Content-Disposition') || ''; const m = cd.match(/filename="(.+?)"/);
-        a.download = m ? m[1] : `siem_parsed.${selFmtVal}`; a.href = url; a.click(); URL.revokeObjectURL(url);
-        await previewLogs();
-        showAlert(`✓ Downloaded ${a.download}`, 'success');
-      } catch (e) { showAlert('Error: ' + e.message) }
-      finally { btn.disabled = false; document.getElementById('spinner').style.display = 'none'; document.getElementById('btnText').textContent = '▶ Parse & Download' }
-    }
+function triggerDownload(blob, contentDisposition) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const m = (contentDisposition||'').match(/filename="(.+?)"/);
+  a.download = m ? m[1] : 'siem_output.' + selFmtVal;
+  a.href = url; a.click();
+  URL.revokeObjectURL(url);
+}
 
-    async function loadDbStats() {
-      try {
-        const r = await fetch('/api/events/stats'); const s = await r.json();
-        const bySev = s.by_severity || {};
-        const sevColors = { critical: '#dc2626', high: '#d97706', medium: '#ca8a04', low: '#059669' };
-        let html = `<div class="kv-stat"><span class="kv-key">Total events</span><span class="kv-val">${s.total_events || 0}</span></div>`;
-        html += `<div class="kv-stat"><span class="kv-key">Malicious IPs</span><span class="kv-val" style="color:#dc2626">${s.malicious || 0}</span></div>`;
-        for (const [sev, cnt] of Object.entries(bySev)) {
-          html += `<div class="kv-stat"><span class="kv-key">${sev}</span><span class="kv-val" style="color:${sevColors[sev] || 'var(--text)'}">${cnt}</span></div>`;
-        }
-        if (s.top_countries?.length) {
-          html += `<div style="margin-top:10px;font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.07em">Top Countries</div>`;
-          s.top_countries.slice(0, 4).forEach(c => {
-            const flag = FLAGS[c.country_code] || '🌐';
-            html += `<div class="kv-stat"><span class="kv-key">${flag} ${c.country}</span><span class="kv-val">${c.count}</span></div>`;
-          });
-        }
-        document.getElementById('dbStatsPanel').innerHTML = html;
-      } catch (e) { document.getElementById('dbStatsPanel').innerHTML = '<span style="color:var(--muted);font-size:.78rem">No data yet</span>' }
-    }
+// ── Query tab ──────────────────────────────────────────────────────────────
+async function loadDbStats() {
+  try {
+    const r = await fetch('/api/events/stats');
+    const s = await r.json();
+    const bySev = s.by_severity || {};
+    const sevCols = { critical: '#dc2626', high: '#f97316', medium: '#ca8a04', low: '#16a34a' };
 
-    async function runQuery() {
-      const params = new URLSearchParams();
-      const qSev = document.getElementById('qSeverity').value;
-      const qIp = document.getElementById('qIp').value;
-      const qUser = document.getElementById('qUser').value;
-      const qCountry = document.getElementById('qCountry').value;
-      const qSearch = document.getElementById('qSearch').value;
-      const qSession = document.getElementById('qSession').value;
-      const qMal = document.getElementById('qMalicious').checked;
-      if (qSev) params.set('severity', qSev);
-      if (qIp) params.set('source_ip', qIp);
-      if (qUser) params.set('username', qUser);
-      if (qCountry) params.set('geo_country', qCountry);
-      if (qSearch) params.set('search', qSearch);
-      if (qSession) params.set('session_id', qSession);
-      if (qMal) params.set('is_malicious', 'true');
-      params.set('limit', '100');
-      try {
-        const r = await fetch('/api/events?' + params.toString());
-        const data = await r.json();
-        if (!r.ok) throw new Error(data.detail || 'Query failed');
-        const evts = data.events || [];
-        if (!evts.length) { document.getElementById('queryResults').innerHTML = '<div class="empty-state"><div class="ei">📭</div><p>No events match your filters</p></div>'; return }
-        const header = `<div style="padding:12px 18px;font-size:.78rem;color:var(--muted);border-bottom:1px solid var(--border)">Found <strong style="color:var(--text)">${data.total}</strong> events  ·  showing ${evts.length}</div>`;
-        document.getElementById('queryResults').innerHTML = header + '<div id="queryTable"></div>';
-        renderTable(evts, 'queryTable');
-      } catch (e) { showAlert('Query error: ' + e.message, 'error', 'queryAlert') }
+    let html = '';
+    html += `<div class="kv"><span class="kv-k">Total events</span><span class="kv-v">${s.total_events||0}</span></div>`;
+    html += `<div class="kv"><span class="kv-k">Malicious IPs</span><span class="kv-v" style="color:#dc2626">${s.malicious||0}</span></div>`;
+    for (const [sev, cnt] of Object.entries(bySev)) {
+      html += `<div class="kv"><span class="kv-k">${sev.charAt(0).toUpperCase()+sev.slice(1)}</span><span class="kv-v" style="color:${sevCols[sev]||'#1f2937'}">${cnt}</span></div>`;
     }
+    if (s.top_source_ips?.length) {
+      html += '<div style="margin-top:12px;font-size:11px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Top Source IPs</div>';
+      s.top_source_ips.slice(0,4).forEach(({ip,count}) => {
+        html += `<div class="kv"><span class="kv-k" style="font-family:\'JetBrains Mono\',monospace">${ip}</span><span class="kv-v">${count}x</span></div>`;
+      });
+    }
+    document.getElementById('dbSummary').innerHTML = html || '<p style="font-size:12px;color:var(--gray-400)">No events stored yet.</p>';
 
-    async function clearDb() {
-      if (!confirm('Delete ALL stored events from the database?')) return;
-      try {
-        const r = await fetch('/api/events', { method: 'DELETE' });
-        const d = await r.json();
-        showAlert(`Deleted ${d.deleted} events`, 'success', 'queryAlert');
-        loadDbStats();
-        document.getElementById('queryResults').innerHTML = '<div class="empty-state"><div class="ei">🗃</div><p>Database cleared</p></div>';
-      } catch (e) { showAlert('Error: ' + e.message, 'error', 'queryAlert') }
+    // Sessions
+    if (s.sessions?.length) {
+      let shtml = '';
+      s.sessions.slice(0,5).forEach(sess => {
+        shtml += `<div class="session-item">
+          <div class="session-id">${sess.session_id}</div>
+          <div class="session-meta">${sess.filename} · ${sess.event_count} events · ${(sess.created_at||'').slice(0,16)}</div>
+        </div>`;
+      });
+      document.getElementById('sessionsPanel').innerHTML = shtml;
     }
-  </script>
+  } catch(e) {
+    document.getElementById('dbSummary').innerHTML = '<p style="font-size:12px;color:var(--gray-400)">No data yet.</p>';
+  }
+}
+
+async function runQuery() {
+  const params = new URLSearchParams();
+  const qSev  = document.getElementById('qSev').value;
+  const qIp   = document.getElementById('qIp').value.trim();
+  const qUser = document.getElementById('qUser').value.trim();
+  const qCtry = document.getElementById('qCountry').value.trim();
+  const qSrch = document.getElementById('qSearch').value.trim();
+  const qSess = document.getElementById('qSession').value.trim();
+  const qMal  = document.getElementById('qMal').checked;
+  if (qSev)  params.set('severity', qSev);
+  if (qIp)   params.set('source_ip', qIp);
+  if (qUser) params.set('username', qUser);
+  if (qCtry) params.set('geo_country', qCtry);
+  if (qSrch) params.set('search', qSrch);
+  if (qSess) params.set('session_id', qSess);
+  if (qMal)  params.set('is_malicious', 'true');
+  params.set('limit', '100');
+  try {
+    const r = await fetch('/api/events?' + params.toString());
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || 'Query failed');
+    const evts = data.events || [];
+    const hdr = `<div style="padding:12px 18px;font-size:12px;color:var(--gray-500);border-bottom:1px solid var(--gray-100)">
+      Found <strong style="color:var(--gray-800)">${data.total}</strong> events · showing ${evts.length}
+    </div>`;
+    document.getElementById('qResults').innerHTML = hdr + '<div id="qTable"></div>';
+    renderTable(evts, 'qTable');
+    loadDbStats();
+  } catch(e) { showAlert('Query error: ' + e.message, 'err', 'qAlert'); }
+}
+
+async function clearDb() {
+  if (!confirm('Delete ALL stored events from the database? This cannot be undone.')) return;
+  try {
+    const r = await fetch('/api/events', { method: 'DELETE' });
+    const d = await r.json();
+    showAlert('Deleted ' + d.deleted + ' events.', 'ok', 'qAlert');
+    document.getElementById('qResults').innerHTML = '<div class="empty"><div class="empty-icon">🗃</div><p>Database cleared.</p></div>';
+    loadDbStats();
+  } catch(e) { showAlert('Error: ' + e.message, 'err', 'qAlert'); }
+}
+</script>
 </body>
-
 </html>
