@@ -843,6 +843,8 @@ async function parseLogs() {
           input_format: document.getElementById('inputFormat').value,
           output_format: selFmtVal,
           enrich: doEnrich,
+          store: doStore,
+          source_label: document.getElementById('fileName').textContent || 'sample',
           es_index: document.getElementById('esIndex').value,
         })
       });
@@ -852,8 +854,9 @@ async function parseLogs() {
       }
       const blob = await r.blob();
       triggerDownload(blob, r.headers.get('Content-Disposition'));
+      const storedNote = doStore ? ' Events saved to database.' : '';
       await previewLogs();
-      showAlert('✓ File downloaded successfully.', 'ok');
+      showAlert('✓ File downloaded successfully.' + storedNote, 'ok');
     }
   } catch(e) {
     showAlert('Error: ' + e.message);

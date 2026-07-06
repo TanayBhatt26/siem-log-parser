@@ -11,8 +11,10 @@ services:
       - "8000:8000"
     environment:
       - PYTHONUNBUFFERED=1
+      - SIEM_DB_PATH=/data/siem_events.db
     volumes:
       - ./sample_logs:/app/sample_logs:ro
+      - siem-db:/data
     networks:
       - siem-net
     depends_on:
@@ -57,6 +59,8 @@ services:
 
 volumes:
   es-data:
+    driver: local
+  siem-db:
     driver: local
 
 networks:

@@ -3,7 +3,7 @@
 import sys, os, tempfile, uuid, logging
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Query
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Query, Header, Depends
 from fastapi.responses import Response, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -35,10 +35,30 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50MB
 
 
+async def require_api_key(x_api_key: str = Header(None)):
+    """Require the X-API-Key header for destructive operations.
+    If the SIEM_API_KEY env var is not set, this is a no-op (dev mode) —
+    set SIEM_API_KEY before exposing this API beyond localhost.
+    """
+    expected = os.getenv("SIEM_API_KEY")
+    if expected and (not x_api_key or x_api_key != expected):
+        raise HTTPException(401, "Invalid or missing API key. Set the X-API-Key header.")
+
+
 class ParseTextRequest(BaseModel):
     content: str = Field(..., max_length=10_000_000)
     input_format: str = Field("auto", pattern=r"^(auto|syslog|cef|leef|json|evtx|aws_cloudtrail|nginx|zeek)$")
     enrich: bool = False
+
+
+class ExportTextRequest(BaseModel):
+    content: str = Field(..., max_length=10_000_000)
+    input_format: str = Field("auto", pattern=r"^(auto|syslog|cef|leef|json|evtx|aws_cloudtrail|nginx|zeek)$")
+    output_format: str = Field("json", pattern=r"^(json|csv|excel|ndjson|elasticsearch|splunk|stix)$")
+    enrich: bool = False
+    store: bool = False
+    es_index: str = Field("siem-logs", max_length=200)
+    source_label: str = Field("sample", max_length=200)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -88,8 +108,8 @@ async def parse_logs(
         else:
             events = parse(content_str, fmt=fmt)
     except Exception as e:
-        logger.error("Parse error: %s", e, exc_info=True)
-        raise HTTPException(500, f"Parse error: {str(e)}")
+        logger.error("Parse error for %s: %s", file.filename, e, exc_info=True)
+        raise HTTPException(500, "Failed to parse uploaded file. Check server logs for details.")
 
     if do_enrich.lower() == "true":
         events = enrich(events, geoip=True, dns=do_dns.lower() == "true",
@@ -109,8 +129,13 @@ async def parse_logs(
 
     try:
         result, media_type, ext = export(events, output_format, index=es_index)
+    except ValueError as e:
+        # ValueError here is "unknown export format" — safe to show the client
+        # since output_format is a small enum, not user-controlled free text leaking internals.
+        raise HTTPException(400, str(e))
     except Exception as e:
-        raise HTTPException(500, f"Export error: {str(e)}")
+        logger.error("Export error for format %s: %s", output_format, e, exc_info=True)
+        raise HTTPException(500, "Failed to export events. Check server logs for details.")
 
     if isinstance(result, str):
         result = result.encode("utf-8")
@@ -140,22 +165,32 @@ async def parse_text(payload: ParseTextRequest):
 
 
 @app.post("/api/export/text")
-async def export_text(payload: dict):
-    """Export raw text content to any output format — used when no file is uploaded."""
-    content = payload.get("content", "")
-    input_format = payload.get("input_format", "auto")
-    output_format = payload.get("output_format", "json")
-    do_enrich = payload.get("enrich", False)
-    es_index = payload.get("es_index", "siem-logs")
+async def export_text(payload: ExportTextRequest):
+    """Export raw text content to any output format — used when no file is uploaded
+    (e.g. sample logs loaded in the UI, which never go through /api/parse)."""
+    detected = detect_format(payload.content)
+    fmt = payload.input_format if payload.input_format != "auto" else detected
 
-    detected = detect_format(content)
-    fmt = input_format if input_format != "auto" else detected
-    events = parse(content, fmt=fmt)
+    try:
+        events = parse(payload.content, fmt=fmt)
+    except Exception as e:
+        logger.error("Parse error in export_text: %s", e, exc_info=True)
+        raise HTTPException(500, "Failed to parse the provided content. Check server logs for details.")
 
-    if do_enrich:
+    if payload.enrich:
         events = enrich(events, geoip=True)
 
-    result, media_type, ext = export(events, output_format, index=es_index)
+    session_id = None
+    if payload.store:
+        session_id = str(uuid.uuid4())[:8]
+        store_events(events, session_id=session_id, filename=payload.source_label, fmt=fmt)
+
+    try:
+        result, media_type, ext = export(events, payload.output_format, index=payload.es_index)
+    except Exception as e:
+        logger.error("Export error in export_text: %s", e, exc_info=True)
+        raise HTTPException(500, "Failed to export events. Check server logs for details.")
+
     if isinstance(result, str):
         result = result.encode("utf-8")
 
@@ -163,7 +198,9 @@ async def export_text(payload: dict):
         content=result, media_type=media_type,
         headers={
             "Content-Disposition": f'attachment; filename="siem_export_{fmt}.{ext}"',
-            "Access-Control-Expose-Headers": "Content-Disposition",
+            "X-Session-Id": session_id or "",
+            "X-Event-Count": str(len(events)),
+            "Access-Control-Expose-Headers": "Content-Disposition,X-Session-Id,X-Event-Count",
         }
     )
 
@@ -178,9 +215,17 @@ async def get_sample(fmt: str):
     ext = ext_map.get(fmt)
     if not ext:
         raise HTTPException(404, f"No sample for: {fmt}")
-    path = BASE_DIR / "sample_logs" / f"sample.{ext}"
+    # Defense-in-depth: ext_map is a hardcoded whitelist so this path cannot
+    # currently be steered by user input, but resolve+contain here anyway in
+    # case ext_map is ever extended to include a computed/user-influenced value.
+    sample_base = (BASE_DIR / "sample_logs").resolve()
+    path = (BASE_DIR / "sample_logs" / f"sample.{ext}").resolve()
+    if not str(path).startswith(str(sample_base) + os.sep):
+        raise HTTPException(403, "Invalid sample path")
     if not path.exists():
         raise HTTPException(404, f"Sample file not found: sample.{ext}")
+    if path.stat().st_size > 1_000_000:
+        raise HTTPException(413, "Sample file too large")
     return Response(content=path.read_text(encoding="utf-8", errors="replace"), media_type="text/plain")
 
 
@@ -207,7 +252,7 @@ async def events_stats():
     return get_stats()
 
 
-@app.delete("/api/events")
+@app.delete("/api/events", dependencies=[Depends(require_api_key)])
 async def clear_events(session_id: Optional[str] = None):
     count = delete_events(session_id=session_id)
     return {"deleted": count, "session_id": session_id}
