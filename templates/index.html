@@ -4,11 +4,19 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SIEM Log Parser</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Baloo+2:wght@500;600;700;800&display=swap" rel="stylesheet">
+<script>
+  // Applied before first paint so there's no flash of the wrong theme on load.
+  (function() {
+    var saved = localStorage.getItem('siem-theme') || 'light';
+    document.documentElement.setAttribute('data-theme', saved);
+  })();
+</script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-:root {
+/* ═══ LIGHT THEME (default) ═══ */
+:root, html[data-theme="light"] {
   --white: #ffffff;
   --gray-50: #f9fafb;
   --gray-100: #f3f4f6;
@@ -30,20 +38,135 @@
   --green-500: #22c55e;
   --green-600: #16a34a;
   --yellow-50: #fefce8;
+  --yellow-200: #fde68a;
   --yellow-500: #eab308;
+  --yellow-700: #a16207;
+  --orange-50: #fff7ed;
+  --orange-200: #fed7aa;
   --orange-500: #f97316;
   --red-50: #fef2f2;
   --red-100: #fee2e2;
   --red-500: #ef4444;
   --red-600: #dc2626;
+  --red-700: #b91c1c;
   --purple-50: #faf5ff;
+  --purple-100: #e9d5ff;
   --purple-500: #a855f7;
+  --purple-600: #7c3aed;
+  --on-accent: #ffffff;
   --shadow-sm: 0 1px 2px rgba(0,0,0,.05);
   --shadow: 0 1px 3px rgba(0,0,0,.1), 0 1px 2px rgba(0,0,0,.06);
   --shadow-md: 0 4px 6px rgba(0,0,0,.07), 0 2px 4px rgba(0,0,0,.06);
   --shadow-lg: 0 10px 15px rgba(0,0,0,.1), 0 4px 6px rgba(0,0,0,.05);
   --radius: 8px;
   --radius-lg: 12px;
+  --font-display: 'Inter', sans-serif;
+  --header-border: var(--gray-200);
+}
+
+/* ═══ DARK THEME ═══
+   A muted, professional dashboard dark mode (GitHub/Linear-style) —
+   deliberately NOT a neon/matrix look. */
+html[data-theme="dark"] {
+  --white: #161b22;
+  --gray-50: #0d1117;
+  --gray-100: #1c2128;
+  --gray-200: #30363d;
+  --gray-300: #3d444d;
+  --gray-400: #6e7681;
+  --gray-500: #8b949e;
+  --gray-600: #adbac7;
+  --gray-700: #c9d1d9;
+  --gray-800: #e6edf3;
+  --gray-900: #f0f6fc;
+  --blue-50: #13233d;
+  --blue-100: #1d3a5f;
+  --blue-500: #58a6ff;
+  --blue-600: #388bfd;
+  --blue-700: #1f6feb;
+  --green-50: #0d2818;
+  --green-100: #12331f;
+  --green-500: #3fb950;
+  --green-600: #2ea043;
+  --yellow-50: #2b2111;
+  --yellow-200: #4b3a14;
+  --yellow-500: #d29922;
+  --yellow-700: #e3b341;
+  --orange-50: #2b1d0e;
+  --orange-200: #4a2e14;
+  --orange-500: #f0883e;
+  --red-50: #2d1214;
+  --red-100: #3c1a1e;
+  --red-500: #f85149;
+  --red-600: #da3633;
+  --red-700: #b62324;
+  --purple-50: #21183a;
+  --purple-100: #2d2152;
+  --purple-500: #a371f7;
+  --purple-600: #8957e5;
+  --on-accent: #ffffff;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.3);
+  --shadow: 0 1px 3px rgba(0,0,0,.4), 0 1px 2px rgba(0,0,0,.3);
+  --shadow-md: 0 4px 6px rgba(0,0,0,.35), 0 2px 4px rgba(0,0,0,.3);
+  --shadow-lg: 0 10px 15px rgba(0,0,0,.4), 0 4px 6px rgba(0,0,0,.3);
+  --radius: 8px;
+  --radius-lg: 12px;
+  --font-display: 'Inter', sans-serif;
+  --header-border: var(--gray-200);
+}
+
+/* ═══ FUN THEME ═══
+   "Confetti board" — a curated multi-hue palette (not a random rainbow),
+   tied together by a signature gradient stripe on the header, active tab,
+   logo, and primary button. Severity reds stay serious on purpose: even in
+   a playful skin, "critical" should never look decorative. */
+html[data-theme="fun"] {
+  --white: #ffffff;
+  --gray-50: #fdfcff;
+  --gray-100: #f5f1fb;
+  --gray-200: #e6def5;
+  --gray-300: #d0c2e8;
+  --gray-400: #a996c4;
+  --gray-500: #8571a3;
+  --gray-600: #6b5688;
+  --gray-700: #4f3d6b;
+  --gray-800: #362a4d;
+  --gray-900: #241d38;
+  --blue-50: #fce7f3;
+  --blue-100: #fbcfe8;
+  --blue-500: #ec4899;
+  --blue-600: #db2777;
+  --blue-700: #be185d;
+  --green-50: #ecfdf5;
+  --green-100: #d1fae5;
+  --green-500: #10b981;
+  --green-600: #059669;
+  --yellow-50: #fffbeb;
+  --yellow-200: #fde68a;
+  --yellow-500: #f59e0b;
+  --yellow-700: #b45309;
+  --orange-50: #fff1f2;
+  --orange-200: #fecdd3;
+  --orange-500: #fb7185;
+  --red-50: #fef2f2;
+  --red-100: #fee2e2;
+  --red-500: #ef4444;
+  --red-600: #dc2626;
+  --red-700: #b91c1c;
+  --purple-50: #f0fdfa;
+  --purple-100: #ccfbf1;
+  --purple-500: #14b8a6;
+  --purple-600: #0d9488;
+  --on-accent: #ffffff;
+  --shadow-sm: 0 1px 2px rgba(139,92,246,.08);
+  --shadow: 0 2px 8px rgba(139,92,246,.12), 0 1px 2px rgba(236,72,153,.08);
+  --shadow-md: 0 6px 16px rgba(139,92,246,.14), 0 2px 6px rgba(236,72,153,.1);
+  --shadow-lg: 0 14px 28px rgba(139,92,246,.16), 0 4px 10px rgba(20,184,166,.1);
+  --radius: 10px;
+  --radius-lg: 16px;
+  --font-display: 'Baloo 2', 'Inter', sans-serif;
+  --header-border: transparent;
+  --confetti-gradient: linear-gradient(90deg, #ec4899, #8b5cf6 33%, #14b8a6 66%, #f59e0b);
 }
 
 body {
@@ -53,6 +176,7 @@ body {
   font-size: 14px;
   line-height: 1.5;
   min-height: 100vh;
+  transition: background-color .2s ease, color .2s ease;
 }
 
 /* ── HEADER ── */
@@ -68,16 +192,17 @@ header {
   position: sticky;
   top: 0;
   z-index: 100;
+  transition: background-color .2s ease, border-color .2s ease;
 }
 .logo-wrap {
   width: 36px; height: 36px;
-  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  background: linear-gradient(135deg, var(--blue-600), var(--purple-600));
   border-radius: var(--radius);
   display: flex; align-items: center; justify-content: center;
   font-size: 18px;
   flex-shrink: 0;
 }
-.header-title { font-size: 16px; font-weight: 700; color: var(--gray-900); }
+.header-title { font-size: 16px; font-weight: 700; color: var(--gray-900); font-family: var(--font-display); }
 .header-sub { font-size: 12px; color: var(--gray-400); margin-top: 1px; }
 .header-badge {
   margin-left: auto;
@@ -90,6 +215,29 @@ header {
   font-weight: 600;
   letter-spacing: .02em;
 }
+.theme-switch {
+  display: flex;
+  gap: 2px;
+  background: var(--gray-100);
+  border: 1px solid var(--gray-200);
+  border-radius: 20px;
+  padding: 3px;
+}
+.theme-btn {
+  width: 26px; height: 26px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .15s;
+  opacity: .55;
+  filter: grayscale(.4);
+}
+.theme-btn:hover { opacity: .85; background: var(--white); }
+.theme-btn.active { opacity: 1; filter: none; background: var(--white); box-shadow: var(--shadow-sm); }
 
 /* ── TABS ── */
 .tab-bar {
@@ -110,9 +258,16 @@ header {
   white-space: nowrap;
 }
 .tab-btn:hover { color: var(--gray-700); }
-.tab-btn.active { color: var(--blue-600); border-bottom-color: var(--blue-600); font-weight: 600; }
+.tab-btn.active { color: var(--blue-600); border-bottom-color: var(--blue-600); font-weight: 600; font-family: var(--font-display); }
 .tab-pane { display: none; }
 .tab-pane.active { display: block; }
+
+/* Fun theme signature: a confetti gradient stripe on structural chrome */
+html[data-theme="fun"] header { border-bottom: 3px solid transparent; border-image: var(--confetti-gradient) 1; }
+html[data-theme="fun"] .tab-btn.active { border-bottom: 3px solid transparent; border-image: var(--confetti-gradient) 1; color: var(--blue-700); }
+html[data-theme="fun"] .logo-wrap { background: var(--confetti-gradient); }
+html[data-theme="fun"] .btn-primary { background: var(--confetti-gradient); color: var(--on-accent); }
+html[data-theme="fun"] .btn-primary:hover { filter: brightness(1.06); box-shadow: var(--shadow-md); }
 
 /* ── LAYOUT ── */
 .page { max-width: 1320px; margin: 0 auto; padding: 28px 24px; }
@@ -127,6 +282,7 @@ header {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
+  transition: background-color .2s ease, border-color .2s ease;
 }
 .card-head {
   padding: 14px 18px;
@@ -139,6 +295,7 @@ header {
   font-size: 13px;
   font-weight: 600;
   color: var(--gray-700);
+  font-family: var(--font-display);
 }
 .card-head .icon { font-size: 15px; }
 .card-body { padding: 18px; }
@@ -280,7 +437,7 @@ header {
 .spin {
   display: none; width: 16px; height: 16px;
   border: 2px solid rgba(255,255,255,.3);
-  border-top-color: #fff;
+  border-top-color: var(--on-accent);
   border-radius: 50%;
   animation: rotate .6s linear infinite;
 }
@@ -325,7 +482,7 @@ header {
 .det-chip {
   padding: 3px 10px;
   background: var(--purple-50);
-  border: 1px solid #e9d5ff;
+  border: 1px solid var(--purple-100);
   color: var(--purple-500);
   border-radius: 20px;
   font-size: 11px;
@@ -364,8 +521,8 @@ tbody tr:last-child td { border-bottom: none; }
   letter-spacing: .04em; font-family: 'Inter', sans-serif;
 }
 .sev-critical { background: var(--red-100); color: var(--red-600); }
-.sev-high { background: #fff7ed; color: var(--orange-500); border: 1px solid #fed7aa; }
-.sev-medium { background: var(--yellow-50); color: #a16207; border: 1px solid #fde68a; }
+.sev-high { background: var(--orange-50); color: var(--orange-500); border: 1px solid var(--orange-200); }
+.sev-medium { background: var(--yellow-50); color: var(--yellow-700); border: 1px solid var(--yellow-200); }
 .sev-low { background: var(--green-100); color: var(--green-600); }
 
 /* ── EMPTY STATE ── */
@@ -387,7 +544,7 @@ tbody tr:last-child td { border-bottom: none; }
 .session-id { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--blue-600); font-weight: 600; }
 .session-meta { color: var(--gray-400); font-size: 11px; margin-top: 2px; }
 .btn-danger { background: var(--red-600); color: var(--white); margin-top: 8px; }
-.btn-danger:hover { background: #b91c1c; }
+.btn-danger:hover { background: var(--red-700); }
 
 /* ── RESPONSIVE ── */
 @media (max-width: 900px) {
@@ -396,6 +553,7 @@ tbody tr:last-child td { border-bottom: none; }
   header { padding: 0 16px; }
   .tab-bar { padding: 0 16px; }
   .page { padding: 16px; }
+  .header-badge { display: none; }
 }
 </style>
 </head>
@@ -408,6 +566,11 @@ tbody tr:last-child td { border-bottom: none; }
     <div class="header-sub">Universal Log Normalization Pipeline</div>
   </div>
   <div class="header-badge">v3.0 · 8 Formats · GeoIP · SQLite</div>
+  <div class="theme-switch" role="group" aria-label="Theme">
+    <button class="theme-btn" data-theme-choice="light" onclick="setTheme('light')" title="Light theme">☀️</button>
+    <button class="theme-btn" data-theme-choice="dark" onclick="setTheme('dark')" title="Dark theme">🌙</button>
+    <button class="theme-btn" data-theme-choice="fun" onclick="setTheme('fun')" title="Fun theme">🎉</button>
+  </div>
 </header>
 
 <div class="tab-bar">
@@ -642,6 +805,16 @@ tbody tr:last-child td { border-bottom: none; }
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
+// ── Theme switcher ───────────────────────────────────────────────────────────
+function setTheme(name) {
+  document.documentElement.setAttribute('data-theme', name);
+  localStorage.setItem('siem-theme', name);
+  document.querySelectorAll('.theme-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.themeChoice === name));
+}
+// Sync the button highlight with whatever theme the no-FOUC script already applied.
+setTheme(document.documentElement.getAttribute('data-theme') || 'light');
+
 let selFmtVal = 'json';
 let selFile = null;
 let pastedContent = null;
@@ -882,7 +1055,7 @@ async function loadDbStats() {
     const r = await fetch('/api/events/stats');
     const s = await r.json();
     const bySev = s.by_severity || {};
-    const sevCols = { critical: '#dc2626', high: '#f97316', medium: '#ca8a04', low: '#16a34a' };
+    const sevCols = { critical: 'var(--red-600)', high: 'var(--orange-500)', medium: 'var(--yellow-700)', low: 'var(--green-600)' };
 
     let html = '';
     html += `<div class="kv"><span class="kv-k">Total events</span><span class="kv-v">${s.total_events||0}</span></div>`;
