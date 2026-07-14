@@ -8,8 +8,8 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 # ── Runtime Stage ─────────────────────────────────────────────────────────────
 FROM python:3.12-slim AS runtime
 LABEL maintainer="TanayBhatt26"
-LABEL description="Universal SIEM Log Parser — Syslog/CEF/LEEF/JSON/EVTX → CSV/Excel/ES/Splunk/STIX 2.1"
-LABEL version="3.0.0"
+LABEL description="Universal SIEM Log Parser — Syslog/CEF/LEEF/JSON/EVTX → CSV/Excel/ES/Splunk/STIX 2.1 + AI Triage"
+LABEL version="3.1.0"
 WORKDIR /app
 COPY --from=builder /install /usr/local
 COPY schema.py ./
@@ -17,6 +17,7 @@ COPY parsers/   ./parsers/
 COPY exporters/ ./exporters/
 COPY enrichers/ ./enrichers/
 COPY storage/   ./storage/
+COPY triage/    ./triage/
 COPY api/       ./api/
 COPY templates/ ./templates/
 COPY static/    ./static/

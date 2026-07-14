@@ -1,6 +1,6 @@
 # 🛡 SIEM Log Parser
 
-Universal SIEM log normalization pipeline with a FastAPI backend, a rich CLI, GeoIP/threat-intel enrichment, SQLite-backed event storage, and a clean, professional web UI.
+Universal SIEM log normalization pipeline with a FastAPI backend, a rich CLI, GeoIP/threat-intel enrichment, SQLite-backed event storage, AI-powered incident triage (Claude), and a clean, professional web UI.
 
 ## Architecture
 
@@ -51,6 +51,17 @@ Format is auto-detected by default, or can be forced with `-f <format>` / `input
 
 > **Note on GeoIP/rDNS**: these features require outbound internet access from wherever you run the server. If you're on a network that blocks outbound HTTP (e.g. an isolated lab), GeoIP fields will simply stay empty — the app won't crash, it just won't have geo data to show.
 
+## AI Triage
+
+Instead of handing an analyst a table of isolated events, the triage layer asks Claude to reconstruct them into an incident: a title, a severity + confidence assessment, a 2–4 paragraph narrative connecting related events, the IOCs that matter, and concrete recommended actions ordered by urgency. Output is JSON-schema-enforced, so the CLI, REST API, and web UI all render the same structure.
+
+- **With an Anthropic API key** (an `ANTHROPIC_API_KEY` environment variable on the server, the `--api-key` CLI flag, or the key field in the web UI): full LLM triage using `claude-opus-4-8` by default (override with `SIEM_TRIAGE_MODEL` or `--model`).
+- **Without a key / offline**: a rule-based fallback produces the same output shape from aggregate signals (severity distribution, top offender IPs, threat-intel hits) — clearly labeled as rule-based, with `confidence: low`. The feature never crashes the pipeline; any LLM failure degrades to the fallback with the reason noted in the response.
+
+By default only **high and critical** events are analyzed (`min_severity` adjustable); if nothing clears the bar, the whole batch is triaged so "nothing actionable here" is still an evidence-backed answer. At most 100 events are sent to the model (worst severity first), alongside aggregate statistics computed over the full selection. Raw log lines are excluded from the payload.
+
+> **Privacy note**: LLM triage sends event fields (IPs, usernames, hostnames, messages) to the Anthropic API. Use the rule-based mode (no key) if your logs can't leave your network.
+
 ---
 
 ## Quick Start
@@ -87,7 +98,8 @@ Stored events persist across restarts via a named Docker volume (`siem-db`).
 1. Open `http://localhost:8000`
 2. **Parse & Export tab**: drag in a log file, or click **Load Sample Logs** to try one of the 8 bundled samples
 3. Toggle **GeoIP** / **Store** / **rDNS** as needed, pick an output format, then **Preview Only** or **Parse & Download**
-4. **Stored Events tab**: only shows events you've explicitly saved (toggle **Store** on before parsing). Filter by severity, IP, username, country, or free-text search.
+4. **AI Triage panel** (below the events table): with logs loaded, click **Run AI Triage** for an incident narrative with IOCs and recommended actions. Paste an Anthropic API key for full Claude analysis, or leave it blank for the rule-based summary (or the server's `ANTHROPIC_API_KEY`, if set).
+5. **Stored Events tab**: only shows events you've explicitly saved (toggle **Store** on before parsing). Filter by severity, IP, username, country, or free-text search.
 
 ---
 
@@ -122,6 +134,12 @@ python cli.py watch /var/log/syslog --interval 2 --enrich
 
 # List all supported formats
 python cli.py list-formats
+
+# AI incident triage (uses ANTHROPIC_API_KEY if set; rule-based fallback otherwise)
+python cli.py triage sample_logs/sample.cef
+python cli.py triage auth.log --min-severity medium --enrich
+python cli.py triage --from-db --session a1b2c3d4
+python cli.py triage sample_logs/sample.syslog --json > triage.json
 ```
 
 ### `parse` options
@@ -183,6 +201,21 @@ curl -X POST http://localhost:8000/api/export/text \
   -o bundle.json
 ```
 
+### `POST /api/triage` — AI incident triage
+Analyzes raw log text (or already-stored events with `"from_db": true`) and returns an incident assessment: title, severity, narrative, IOCs, recommended actions. Uses Claude when a key is available; rule-based fallback otherwise (`generated_by` tells you which).
+```bash
+# Triage raw text (key from the server's ANTHROPIC_API_KEY env var, if set)
+curl -X POST http://localhost:8000/api/triage \
+  -H "Content-Type: application/json" \
+  -d '{"content":"<34>Oct 11 22:14:15 fw01 sshd[4721]: Failed password for admin from 203.0.113.7","min_severity":"low"}'
+
+# Triage stored events from one session, passing a key per-request
+curl -X POST http://localhost:8000/api/triage \
+  -H "Content-Type: application/json" \
+  -d '{"from_db":true,"session_id":"a1b2c3d4","anthropic_api_key":"sk-ant-..."}'
+```
+Fields: `content` or `from_db` (one required), `input_format`, `enrich`, `session_id`, `limit`, `min_severity` (`low|medium|high|critical`, default `high`), `anthropic_api_key`.
+
 ### `GET /api/sample/{format}` — Get bundled sample log content
 ```bash
 curl http://localhost:8000/api/sample/cef
@@ -219,6 +252,7 @@ A few things worth knowing if you extend this project:
 - **CORS** is currently wide open (`allow_origins=["*"]`) so the UI works from `localhost`, `127.0.0.1`, or a LAN IP without extra config. Tighten this with the `CORS_ORIGINS`-style pattern shown in the security doc before deploying anywhere beyond a local demo.
 - **`DELETE /api/events`** has no auth by default — set `SIEM_API_KEY` before exposing the API on a network others can reach.
 - **GeoIP** uses plain HTTP to ip-api.com's free batch endpoint — this is the free tier's documented behavior (their HTTPS batch endpoint is a paid feature), so IPs in your logs are sent unencrypted to a third party during enrichment. Skip `--enrich` / the GeoIP toggle if that's a concern for your log data.
+- **AI Triage (`POST /api/triage`)** is unauthenticated like the rest of the API. If you set a server-side `ANTHROPIC_API_KEY`, any client that can reach the server can trigger billed Claude calls — with CORS wide open, that includes cross-origin callers. For a networked deployment, don't set a server-side key (let each user paste their own in the UI, or leave it on the free rule-based fallback), or put the API behind auth/rate-limiting. LLM triage also sends log fields to Anthropic, and because log content is attacker-influenceable, treat the generated narrative/actions as an analyst aid to verify, not an authoritative verdict.
 
 ---
 
@@ -296,13 +330,17 @@ siem-log-parser/
 ├── storage/
 │   ├── __init__.py
 │   └── db.py                    # SQLite persistence + query layer
+├── triage/
+│   ├── __init__.py
+│   └── llm_triage.py            # AI incident triage (Claude + rule-based fallback)
 ├── api/
 │   └── main.py                  # FastAPI application
 ├── templates/
 │   └── index.html               # Web UI
 ├── sample_logs/                 # Sample files for all 8 formats
 ├── tests/
-│   └── test_security_audit.py   # Security regression tests
+│   ├── test_security_audit.py   # Security regression tests
+│   └── test_triage.py           # AI triage tests (LLM mocked — no network)
 ├── docs/
 │   └── SECURITY_FIXES.md        # Security audit changelog
 ├── .github/workflows/

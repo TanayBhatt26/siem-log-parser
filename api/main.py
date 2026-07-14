@@ -16,10 +16,12 @@ from parsers.evtx_parser import parse_evtx_file
 from exporters import export, SUPPORTED_FORMATS
 from enrichers import enrich
 from storage.db import store_events, query_events, get_stats, delete_events
+from schema import LogEvent
+from triage import triage_events
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="SIEM Log Parser API", version="3.0.0")
+app = FastAPI(title="SIEM Log Parser API", version="3.1.0")
 
 # Fix: allow all origins so the UI works from any address (localhost, 127.0.0.1, LAN IP)
 app.add_middleware(
@@ -59,6 +61,22 @@ class ExportTextRequest(BaseModel):
     store: bool = False
     es_index: str = Field("siem-logs", max_length=200)
     source_label: str = Field("sample", max_length=200)
+
+
+class TriageRequest(BaseModel):
+    # Mode A: triage raw log text (parsed server-side)
+    content: Optional[str] = Field(None, max_length=10_000_000)
+    input_format: str = Field("auto", pattern=r"^(auto|syslog|cef|leef|json|evtx|aws_cloudtrail|nginx|zeek)$")
+    enrich: bool = False
+    do_dns: bool = False
+    abuseipdb_key: str = Field("", max_length=300)
+    # Mode B: triage events already stored in the database
+    from_db: bool = False
+    session_id: Optional[str] = Field(None, max_length=64)
+    limit: int = Field(500, ge=1, le=500)
+    # Triage options
+    min_severity: str = Field("high", pattern=r"^(low|medium|high|critical)$")
+    anthropic_api_key: Optional[str] = Field(None, max_length=300)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -227,6 +245,48 @@ async def get_sample(fmt: str):
     if path.stat().st_size > 1_000_000:
         raise HTTPException(413, "Sample file too large")
     return Response(content=path.read_text(encoding="utf-8", errors="replace"), media_type="text/plain")
+
+
+# NOTE: declared as a plain `def` (not `async def`) on purpose. triage_events()
+# makes a *blocking* Claude API call; a sync route runs in FastAPI's threadpool
+# so a slow/hanging LLM request can't freeze the uvicorn event loop for every
+# other client. Do not change this to `async def` without offloading the call.
+@app.post("/api/triage")
+def triage(payload: TriageRequest):
+    """AI incident triage: parse raw text (or load stored events) and return
+    an incident narrative. Uses the Claude API when a key is available
+    (request field, else ANTHROPIC_API_KEY on the server); otherwise
+    falls back to a rule-based summary."""
+    if payload.content:
+        detected = detect_format(payload.content)
+        fmt = payload.input_format if payload.input_format != "auto" else detected
+        try:
+            events = parse(payload.content, fmt=fmt)
+        except Exception as e:
+            logger.error("Parse error in triage: %s", e, exc_info=True)
+            raise HTTPException(500, "Failed to parse the provided content. Check server logs for details.")
+        if payload.enrich:
+            # Pass threat-intel through: malicious-IP flags are the highest-value
+            # triage signal, so honor the AbuseIPDB key / rDNS toggle when present.
+            events = enrich(
+                events, geoip=True, dns=payload.do_dns,
+                threatintel=bool(payload.abuseipdb_key),
+                abuseipdb_key=payload.abuseipdb_key or None,
+            )
+    elif payload.from_db:
+        result = query_events(session_id=payload.session_id, limit=payload.limit)
+        events = [
+            LogEvent(**{k: v for k, v in d.items() if k in LogEvent.__dataclass_fields__})
+            for d in result["events"]
+        ]
+    else:
+        raise HTTPException(400, "Provide 'content' (raw logs) or set 'from_db' to true.")
+
+    return triage_events(
+        events,
+        min_severity=payload.min_severity,
+        api_key=payload.anthropic_api_key or None,
+    )
 
 
 @app.get("/api/events")

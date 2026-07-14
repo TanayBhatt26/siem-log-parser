@@ -21,12 +21,15 @@ try:
     from rich.table import Table
     from rich.panel import Panel
     from rich.progress import Progress, SpinnerColumn, TextColumn
+    from rich.markup import escape as rich_escape
     from rich import box
     RICH = True
     console = Console()
 except ImportError:
     RICH = False
     console = None
+    def rich_escape(s):  # no-op when rich isn't installed
+        return s
 
 SEV_COLORS = {"critical":"bold red","high":"bold yellow","medium":"yellow","low":"green"}
 SEV_ICONS  = {"critical":"🔴","high":"🟠","medium":"🟡","low":"🟢"}
@@ -45,7 +48,7 @@ def _read_file(path):
 def _banner():
     if RICH:
         console.print(Panel.fit(
-            "[bold cyan]🛡  SIEM Log Parser[/bold cyan]  [dim]v3.0 · GeoIP · SQLite · 8 Input Formats[/dim]",
+            "[bold cyan]🛡  SIEM Log Parser[/bold cyan]  [dim]v3.1 · GeoIP · SQLite · AI Triage · 8 Input Formats[/dim]",
             border_style="cyan"))
 
 def _print_stats(events, detected, filename):
@@ -397,6 +400,126 @@ def watch(file, input_fmt, interval, do_enrich):
     except KeyboardInterrupt:
         if RICH:
             console.print("\n[dim]Stopped.[/dim]")
+
+
+@cli.command()
+@click.argument("file", type=click.Path(exists=True), required=False)
+@click.option("-f","--format","input_fmt", default="auto",
+              type=click.Choice(list(PARSERS.keys()) + ["auto"]))
+@click.option("--from-db", "from_db", is_flag=True, help="Triage stored events instead of a file")
+@click.option("--session", default=None, help="Limit --from-db to one session ID")
+@click.option("--min-severity", default="high",
+              type=click.Choice(["low","medium","high","critical"]), show_default=True,
+              help="Only triage events at or above this severity")
+@click.option("--enrich","do_enrich", is_flag=True, help="GeoIP-enrich before triage")
+@click.option("--api-key", default="", help="Anthropic API key (default: ANTHROPIC_API_KEY env)")
+@click.option("--model", default=None, help="Claude model ID (default: claude-opus-4-8)")
+@click.option("--json","as_json", is_flag=True, help="Print the raw JSON result")
+def triage(file, input_fmt, from_db, session, min_severity, do_enrich, api_key, model, as_json):
+    """🧠 AI incident triage — narrative, IOCs, and recommended actions.
+
+    Analyzes high-priority events with Claude when an Anthropic API key is
+    available; falls back to a rule-based summary otherwise.
+    """
+    _banner()
+    from triage import triage_events
+
+    if from_db:
+        from storage.db import query_events
+        from schema import LogEvent
+        result = query_events(session_id=session, limit=500)
+        events = [
+            LogEvent(**{k: v for k, v in d.items() if k in LogEvent.__dataclass_fields__})
+            for d in result["events"]
+        ]
+        source_label = f"database ({result['total']} stored events)"
+    elif file:
+        content, is_binary = _read_file(file)
+        if is_binary:
+            from parsers.evtx_parser import parse_evtx_file
+            events = parse_evtx_file(file)
+        else:
+            fmt = detect_format(content) if input_fmt == "auto" else input_fmt
+            events = parse(content, fmt=fmt)
+        if do_enrich:
+            from enrichers import enrich as _enrich
+            events = _enrich(events, geoip=True)
+        source_label = os.path.basename(file)
+    else:
+        raise click.UsageError("Provide a log FILE to triage, or use --from-db.")
+
+    if RICH:
+        with Progress(SpinnerColumn(), TextColumn("[cyan]{task.description}"), transient=True) as p:
+            p.add_task(f"Triaging {len(events)} events from {source_label}...")
+            result = triage_events(events, min_severity=min_severity,
+                                   model=model, api_key=api_key or None)
+    else:
+        click.echo(f"Triaging {len(events)} events from {source_label}...")
+        result = triage_events(events, min_severity=min_severity,
+                               model=model, api_key=api_key or None)
+
+    if as_json:
+        import json as _json
+        click.echo(_json.dumps(result, indent=2, ensure_ascii=False))
+        return
+
+    t = result.get("triage")
+    if not t:
+        click.echo(result.get("note") or "Nothing to triage.")
+        return
+
+    gen = ("Claude · " + result["model"]) if result["generated_by"] == "llm" else "rule-based fallback (no LLM)"
+    if RICH:
+        # Triage fields are derived from attacker-controlled log content, so escape
+        # them before printing — otherwise a log line containing Rich markup like
+        # "[/]" or "[red]" would corrupt the terminal rendering.
+        sev = t["severity"]
+        color = SEV_COLORS.get(sev, "white")
+        console.print(Panel.fit(
+            f"[bold]{rich_escape(t['title'])}[/bold]\n"
+            f"[{color}]{SEV_ICONS.get(sev,'')} {rich_escape(sev.upper())}[/{color}]  ·  "
+            f"confidence: {rich_escape(t['confidence'])}  ·  [dim]{rich_escape(gen)}[/dim]",
+            border_style=color.replace("bold ", "")))
+        console.print(f"\n[bold]Narrative[/bold]\n{rich_escape(t['narrative'])}\n")
+        if t.get("attack_pattern"):
+            console.print(f"[bold]Attack pattern:[/bold] {rich_escape(t['attack_pattern'])}\n")
+        if t.get("key_observations"):
+            console.print("[bold]Key observations[/bold]")
+            for obs in t["key_observations"]:
+                console.print(f"  • {rich_escape(str(obs))}")
+            console.print()
+        if t.get("iocs"):
+            it = Table(box=box.SIMPLE, header_style="bold cyan")
+            it.add_column("Type"); it.add_column("Value", style="bold"); it.add_column("Context")
+            for ioc in t["iocs"]:
+                it.add_row(rich_escape(str(ioc.get("type", ""))),
+                           rich_escape(str(ioc.get("value", ""))),
+                           rich_escape(str(ioc.get("context", ""))))
+            console.print(Panel(it, title="[bold]IOCs[/bold]", border_style="dim"))
+        if t.get("recommended_actions"):
+            console.print("\n[bold]Recommended actions[/bold]")
+            for i, act in enumerate(t["recommended_actions"], 1):
+                console.print(f"  {i}. {rich_escape(str(act))}")
+        if result.get("note"):
+            console.print(f"\n[dim]{rich_escape(str(result['note']))}[/dim]")
+    else:
+        click.echo(f"\n{t['title']}")
+        click.echo(f"Severity: {t['severity'].upper()}  Confidence: {t['confidence']}  ({gen})")
+        click.echo(f"\n{t['narrative']}\n")
+        if t.get("attack_pattern"):
+            click.echo(f"Attack pattern: {t['attack_pattern']}")
+        for obs in t.get("key_observations", []):
+            click.echo(f"  - {obs}")
+        if t.get("iocs"):
+            click.echo("IOCs:")
+            for ioc in t["iocs"]:
+                click.echo(f"  [{ioc.get('type','')}] {ioc.get('value','')} — {ioc.get('context','')}")
+        if t.get("recommended_actions"):
+            click.echo("Recommended actions:")
+            for i, act in enumerate(t["recommended_actions"], 1):
+                click.echo(f"  {i}. {act}")
+        if result.get("note"):
+            click.echo(f"\nNote: {result['note']}")
 
 
 @cli.command("list-formats")

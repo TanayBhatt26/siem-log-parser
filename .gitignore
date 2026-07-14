@@ -19,3 +19,4 @@ node_modules/
 .vscode/
 exporters/__init_placeholder__
 siem_events.db
+.claude/

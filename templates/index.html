@@ -546,6 +546,26 @@ tbody tr:last-child td { border-bottom: none; }
 .btn-danger { background: var(--red-600); color: var(--white); margin-top: 8px; }
 .btn-danger:hover { background: var(--red-700); }
 
+/* ── AI TRIAGE ── */
+.triage-controls { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 14px; }
+.triage-controls .field { margin-bottom: 0; flex: 1; min-width: 140px; }
+.triage-controls .btn { width: auto; padding: 9px 18px; flex-shrink: 0; }
+.triage-result { display: none; border-top: 1px solid var(--gray-100); padding-top: 16px; }
+.triage-head-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.triage-title { font-size: 15px; font-weight: 700; color: var(--gray-900); font-family: var(--font-display); }
+.gen-chip {
+  padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600;
+  background: var(--purple-50); border: 1px solid var(--purple-100); color: var(--purple-600);
+}
+.triage-section-title {
+  font-size: 11px; font-weight: 600; color: var(--gray-500);
+  text-transform: uppercase; letter-spacing: .05em; margin: 14px 0 6px;
+}
+.triage-narrative { font-size: 13px; color: var(--gray-700); line-height: 1.65; white-space: pre-wrap; }
+.triage-list { margin: 0; padding-left: 20px; font-size: 13px; color: var(--gray-700); }
+.triage-list li { margin-bottom: 4px; }
+.triage-note { font-size: 12px; color: var(--gray-400); margin-top: 12px; font-style: italic; }
+
 /* ── RESPONSIVE ── */
 @media (max-width: 900px) {
   .two-col, .query-grid { grid-template-columns: 1fr; }
@@ -565,7 +585,7 @@ tbody tr:last-child td { border-bottom: none; }
     <div class="header-title">SIEM Log Parser</div>
     <div class="header-sub">Universal Log Normalization Pipeline</div>
   </div>
-  <div class="header-badge">v3.0 · 8 Formats · GeoIP · SQLite</div>
+  <div class="header-badge">v3.1 · 8 Formats · GeoIP · AI Triage</div>
   <div class="theme-switch" role="group" aria-label="Theme">
     <button class="theme-btn" data-theme-choice="light" onclick="setTheme('light')" title="Light theme">☀️</button>
     <button class="theme-btn" data-theme-choice="dark" onclick="setTheme('dark')" title="Dark theme">🌙</button>
@@ -714,6 +734,37 @@ tbody tr:last-child td { border-bottom: none; }
           <div class="empty-icon">🛡</div>
           <p>Upload a log file or click <strong>Load Sample Logs</strong>,<br>then click <strong>Preview Only</strong> or <strong>Parse &amp; Download</strong>.</p>
         </div>
+      </div>
+    </div>
+
+    <!-- AI Triage -->
+    <div class="card" style="margin-top:24px">
+      <div class="card-head"><span class="icon">🧠</span><h3>AI Triage</h3></div>
+      <div class="card-body">
+        <p style="font-size:12px;color:var(--gray-400);margin-bottom:14px;line-height:1.5">
+          Turn the loaded events into an incident narrative — what happened, IOCs, and what to do next.
+          Uses Claude when an Anthropic API key is provided (or set on the server); otherwise a rule-based summary.
+        </p>
+        <div class="triage-controls">
+          <div class="field">
+            <label>Min Severity</label>
+            <select id="triSev">
+              <option value="high" selected>High +</option>
+              <option value="critical">Critical only</option>
+              <option value="medium">Medium +</option>
+              <option value="low">All events</option>
+            </select>
+          </div>
+          <div class="field" style="flex:2">
+            <label>Anthropic API Key <span style="color:var(--gray-400);font-weight:400">(optional)</span></label>
+            <input type="password" id="triKey" autocomplete="off" spellcheck="false" placeholder="sk-ant-… (blank = server key or rule-based)">
+          </div>
+          <button class="btn btn-primary" id="triBtn" onclick="runTriage()">
+            <div class="spin" id="triSpin"></div>
+            <span id="triLbl">🧠 Run AI Triage</span>
+          </button>
+        </div>
+        <div class="triage-result" id="triageResult"></div>
       </div>
     </div>
   </div>
@@ -1049,6 +1100,137 @@ function triggerDownload(blob, contentDisposition) {
   URL.revokeObjectURL(url);
 }
 
+// ── AI Triage ──────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+                        .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// Pull a human-readable message out of an error response. FastAPI/pydantic 422s
+// return `detail` as an array of objects, not a string — stringifying that
+// naively gives "[object Object]", so flatten it here. Also survives non-JSON
+// bodies (proxy errors, HTML 500 pages).
+async function errText(r) {
+  let body;
+  try { body = await r.json(); }
+  catch { return r.statusText || ('HTTP ' + r.status); }
+  const d = body && body.detail;
+  if (typeof d === 'string') return d;
+  if (Array.isArray(d)) {
+    return d.map(e => (Array.isArray(e.loc) ? e.loc.slice(1).join('.') + ': ' : '')
+                      + (e.msg || JSON.stringify(e))).join('; ');
+  }
+  return d ? JSON.stringify(d) : (r.statusText || ('HTTP ' + r.status));
+}
+
+// Read the selected file for triage as text. Binary .evtx has no text form —
+// detect the magic header and steer the user to the parse+store path instead of
+// silently sending mojibake to the model.
+async function readSelFileForTriage() {
+  if (!selFile) return pastedContent;
+  const buf = await selFile.arrayBuffer();
+  const magic = String.fromCharCode.apply(null, new Uint8Array(buf.slice(0, 8)));
+  if (magic === 'ElfFile\x00') {
+    throw new Error("Binary .evtx files can't be triaged directly. Use Parse & Download "
+                  + "with Store enabled, then triage the stored events from the Stored Events tab.");
+  }
+  return new TextDecoder('utf-8').decode(buf);
+}
+
+function showTriageError(msg) {
+  const box = document.getElementById('triageResult');
+  box.innerHTML = '<p class="triage-note" style="color:var(--red-600);font-style:normal">' + esc(msg) + '</p>';
+  box.style.display = 'block';
+  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function runTriage() {
+  let content;
+  try {
+    content = pastedContent || (selFile ? await readSelFileForTriage() : null);
+  } catch(e) {
+    showTriageError(e.message); return;
+  }
+  if (!content) { showTriageError('Upload a file or load sample logs first.'); return; }
+  const btn = document.getElementById('triBtn');
+  btn.disabled = true;
+  document.getElementById('triSpin').style.display = 'block';
+  document.getElementById('triLbl').textContent = 'Analyzing…';
+  try {
+    const r = await fetch('/api/triage', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content,
+        input_format: document.getElementById('inputFormat').value,
+        enrich: document.getElementById('doGeoip').checked,
+        do_dns: document.getElementById('doDns').checked,
+        abuseipdb_key: document.getElementById('abuseKey').value.trim(),
+        min_severity: document.getElementById('triSev').value,
+        anthropic_api_key: document.getElementById('triKey').value.trim() || null,
+      })
+    });
+    if (!r.ok) throw new Error(await errText(r));
+    const data = await r.json();
+    renderTriage(data);
+  } catch(e) {
+    showTriageError('Triage error: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    document.getElementById('triSpin').style.display = 'none';
+    document.getElementById('triLbl').textContent = '🧠 Run AI Triage';
+  }
+}
+
+function renderTriage(data) {
+  const box = document.getElementById('triageResult');
+  const t = data.triage;
+  if (!t) {
+    box.innerHTML = '<p class="triage-note">' + esc(data.note || 'Nothing to triage.') + '</p>';
+    box.style.display = 'block';
+    return;
+  }
+  const gen = data.generated_by === 'llm'
+    ? '🤖 Claude · ' + esc(data.model)
+    : '⚙️ Rule-based fallback';
+  let html = '<div class="triage-head-row">'
+    + '<span class="sev sev-' + esc(t.severity) + '">' + esc(t.severity) + '</span>'
+    + '<span class="triage-title">' + esc(t.title) + '</span>'
+    + '<span class="gen-chip">' + gen + '</span>'
+    + '<span style="font-size:11px;color:var(--gray-400)">confidence: ' + esc(t.confidence)
+    + ' · ' + data.events_analyzed + '/' + data.total_events + ' events analyzed</span>'
+    + '</div>';
+  html += '<div class="triage-narrative">' + esc(t.narrative) + '</div>';
+  if (t.attack_pattern) {
+    html += '<div class="triage-section-title">Attack Pattern</div>'
+          + '<div class="triage-narrative">' + esc(t.attack_pattern) + '</div>';
+  }
+  if (t.key_observations?.length) {
+    html += '<div class="triage-section-title">Key Observations</div><ul class="triage-list">';
+    t.key_observations.forEach(o => html += '<li>' + esc(o) + '</li>');
+    html += '</ul>';
+  }
+  if (t.iocs?.length) {
+    html += '<div class="triage-section-title">Indicators of Compromise</div>'
+          + '<div class="tbl-wrap"><table><thead><tr><th>type</th><th>value</th><th>context</th></tr></thead><tbody>';
+    t.iocs.forEach(i => {
+      html += '<tr><td>' + esc(i.type) + '</td>'
+            + '<td title="' + esc(i.value) + '">' + esc(i.value) + '</td>'
+            + '<td title="' + esc(i.context) + '">' + esc(i.context) + '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+  if (t.recommended_actions?.length) {
+    html += '<div class="triage-section-title">Recommended Actions</div><ol class="triage-list">';
+    t.recommended_actions.forEach(a => html += '<li>' + esc(a) + '</li>');
+    html += '</ol>';
+  }
+  if (data.note) html += '<p class="triage-note">' + esc(data.note) + '</p>';
+  box.innerHTML = html;
+  box.style.display = 'block';
+  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
 // ── Query tab ──────────────────────────────────────────────────────────────
 async function loadDbStats() {
   try {
@@ -1059,9 +1241,9 @@ async function loadDbStats() {
 
     let html = '';
     html += `<div class="kv"><span class="kv-k">Total events</span><span class="kv-v">${s.total_events||0}</span></div>`;
-    html += `<div class="kv"><span class="kv-k">Malicious IPs</span><span class="kv-v" style="color:#dc2626">${s.malicious||0}</span></div>`;
+    html += `<div class="kv"><span class="kv-k">Malicious IPs</span><span class="kv-v" style="color:var(--red-600)">${s.malicious||0}</span></div>`;
     for (const [sev, cnt] of Object.entries(bySev)) {
-      html += `<div class="kv"><span class="kv-k">${sev.charAt(0).toUpperCase()+sev.slice(1)}</span><span class="kv-v" style="color:${sevCols[sev]||'#1f2937'}">${cnt}</span></div>`;
+      html += `<div class="kv"><span class="kv-k">${sev.charAt(0).toUpperCase()+sev.slice(1)}</span><span class="kv-v" style="color:${sevCols[sev]||'var(--gray-800)'}">${cnt}</span></div>`;
     }
     if (s.top_source_ips?.length) {
       html += '<div style="margin-top:12px;font-size:11px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Top Source IPs</div>';
