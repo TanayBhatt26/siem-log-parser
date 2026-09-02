@@ -3,13 +3,18 @@
 import sys, os, tempfile, uuid, logging
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Query, Header, Depends
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Query, Header, Depends, Request
 from fastapi.responses import Response, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from pathlib import Path
 from typing import Optional
+
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi.errors import RateLimitExceeded
 
 from parsers import parse, detect_format, PARSERS
 from parsers.evtx_parser import parse_evtx_file
@@ -23,18 +28,35 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="SIEM Log Parser API", version="3.1.0")
 
-# Fix: allow all origins so the UI works from any address (localhost, 127.0.0.1, LAN IP)
+# H-1: Restrict CORS to specific origins instead of wildcard
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:8000", "http://127.0.0.1:8000"],
     allow_methods=["GET", "POST", "DELETE"],
-    allow_headers=["Content-Type", "Authorization"],
+    allow_headers=["Content-Type", "Authorization", "X-API-Key",
+                   "X-AbuseIPDB-Key", "X-Anthropic-API-Key"],
 )
+
+# M-1: Rate limiting — 60 requests/minute per IP
+limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
+app.state.limiter = limiter
+app.add_middleware(SlowAPIMiddleware)
 
 BASE_DIR = Path(__file__).parent.parent
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
-MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50MB
+# M-2: Reduced max upload size from 50MB to 10MB
+MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10MB
+
+
+# L-6: Security headers middleware
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
 
 
 async def require_api_key(x_api_key: str = Header(None)):
@@ -69,19 +91,29 @@ class TriageRequest(BaseModel):
     input_format: str = Field("auto", pattern=r"^(auto|syslog|cef|leef|json|evtx|aws_cloudtrail|nginx|zeek)$")
     enrich: bool = False
     do_dns: bool = False
-    abuseipdb_key: str = Field("", max_length=300)
+    # M-3: abuseipdb_key and anthropic_api_key moved to headers (X-AbuseIPDB-Key, X-Anthropic-API-Key)
     # Mode B: triage events already stored in the database
     from_db: bool = False
     session_id: Optional[str] = Field(None, max_length=64)
     limit: int = Field(500, ge=1, le=500)
     # Triage options
     min_severity: str = Field("high", pattern=r"^(low|medium|high|critical)$")
-    anthropic_api_key: Optional[str] = Field(None, max_length=300)
+
+
+# L-2: Dedicated /health endpoint for container healthchecks
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
 
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_ui():
-    return HTMLResponse(content=(BASE_DIR / "templates" / "index.html").read_text(encoding="utf-8"))
+    content = (BASE_DIR / "templates" / "index.html").read_text(encoding="utf-8")
+    # L-4: Add Content-Security-Policy header to HTML response
+    return HTMLResponse(
+        content=content,
+        headers={"Content-Security-Policy": "default-src 'self'"},
+    )
 
 
 @app.get("/api/formats")
@@ -89,8 +121,10 @@ async def get_formats():
     return {"input_formats": list(PARSERS.keys()) + ["auto"], "output_formats": SUPPORTED_FORMATS}
 
 
-@app.post("/api/parse")
+@app.post("/api/parse", dependencies=[Depends(require_api_key)])
+@limiter.limit("60/minute")
 async def parse_logs(
+    request: Request,
     file: UploadFile = File(...),
     input_format: str = Form("auto"),
     output_format: str = Form("json"),
@@ -99,7 +133,8 @@ async def parse_logs(
     do_enrich: str = Form("false"),
     do_store: str = Form("false"),
     do_dns: str = Form("false"),
-    abuseipdb_key: str = Form(""),
+    # M-3: AbuseIPDB key moved from form field to header
+    x_abuseipdb_key: str = Header(None, alias="X-AbuseIPDB-Key"),
 ):
     content_bytes = await file.read(MAX_UPLOAD_SIZE + 1)
     if len(content_bytes) > MAX_UPLOAD_SIZE:
@@ -131,7 +166,7 @@ async def parse_logs(
 
     if do_enrich.lower() == "true":
         events = enrich(events, geoip=True, dns=do_dns.lower() == "true",
-                        threatintel=bool(abuseipdb_key), abuseipdb_key=abuseipdb_key or None)
+                        threatintel=bool(x_abuseipdb_key), abuseipdb_key=x_abuseipdb_key or None)
 
     session_id = None
     if do_store.lower() == "true":
@@ -168,8 +203,9 @@ async def parse_logs(
     )
 
 
-@app.post("/api/parse/text")
-async def parse_text(payload: ParseTextRequest):
+@app.post("/api/parse/text", dependencies=[Depends(require_api_key)])
+@limiter.limit("60/minute")
+async def parse_text(request: Request, payload: ParseTextRequest):
     detected = detect_format(payload.content)
     fmt = payload.input_format if payload.input_format != "auto" else detected
     events = parse(payload.content, fmt=fmt)
@@ -182,8 +218,9 @@ async def parse_text(payload: ParseTextRequest):
     }
 
 
-@app.post("/api/export/text")
-async def export_text(payload: ExportTextRequest):
+@app.post("/api/export/text", dependencies=[Depends(require_api_key)])
+@limiter.limit("60/minute")
+async def export_text(request: Request, payload: ExportTextRequest):
     """Export raw text content to any output format — used when no file is uploaded
     (e.g. sample logs loaded in the UI, which never go through /api/parse)."""
     detected = detect_format(payload.content)
@@ -251,11 +288,18 @@ async def get_sample(fmt: str):
 # makes a *blocking* Claude API call; a sync route runs in FastAPI's threadpool
 # so a slow/hanging LLM request can't freeze the uvicorn event loop for every
 # other client. Do not change this to `async def` without offloading the call.
-@app.post("/api/triage")
-def triage(payload: TriageRequest):
+@app.post("/api/triage", dependencies=[Depends(require_api_key)])
+@limiter.limit("60/minute")
+def triage(
+    request: Request,
+    payload: TriageRequest,
+    # M-3: API keys read from headers instead of body
+    x_abuseipdb_key: Optional[str] = Header(None, alias="X-AbuseIPDB-Key"),
+    x_anthropic_api_key: Optional[str] = Header(None, alias="X-Anthropic-API-Key"),
+):
     """AI incident triage: parse raw text (or load stored events) and return
     an incident narrative. Uses the Claude API when a key is available
-    (request field, else ANTHROPIC_API_KEY on the server); otherwise
+    (X-Anthropic-API-Key header, else ANTHROPIC_API_KEY on the server); otherwise
     falls back to a rule-based summary."""
     if payload.content:
         detected = detect_format(payload.content)
@@ -270,8 +314,8 @@ def triage(payload: TriageRequest):
             # triage signal, so honor the AbuseIPDB key / rDNS toggle when present.
             events = enrich(
                 events, geoip=True, dns=payload.do_dns,
-                threatintel=bool(payload.abuseipdb_key),
-                abuseipdb_key=payload.abuseipdb_key or None,
+                threatintel=bool(x_abuseipdb_key),
+                abuseipdb_key=x_abuseipdb_key or None,
             )
     elif payload.from_db:
         result = query_events(session_id=payload.session_id, limit=payload.limit)
@@ -285,7 +329,7 @@ def triage(payload: TriageRequest):
     return triage_events(
         events,
         min_severity=payload.min_severity,
-        api_key=payload.anthropic_api_key or None,
+        api_key=x_anthropic_api_key or None,
     )
 
 

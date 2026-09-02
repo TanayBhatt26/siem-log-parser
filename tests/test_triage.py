@@ -224,6 +224,7 @@ class TestTriageEndpoint:
     def test_abuseipdb_key_passed_to_enrichment(self, client, monkeypatch):
         # The UI's AbuseIPDB key must actually reach the enrichment pipeline —
         # threat-intel (malicious IPs) is the highest-value triage signal.
+        # Security fix: key is now passed via X-AbuseIPDB-Key header, not body.
         seen = {}
         import api.main as m
         def fake_enrich(events, **kw):
@@ -232,8 +233,8 @@ class TestTriageEndpoint:
         monkeypatch.setattr(m, "enrich", fake_enrich)
         r = client.post("/api/triage", json={
             "content": SAMPLE_SYSLOG, "min_severity": "low",
-            "enrich": True, "abuseipdb_key": "test-key", "do_dns": True,
-        })
+            "enrich": True, "do_dns": True,
+        }, headers={"X-AbuseIPDB-Key": "test-key"})
         assert r.status_code == 200
         assert seen.get("threatintel") is True
         assert seen.get("abuseipdb_key") == "test-key"

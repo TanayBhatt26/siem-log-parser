@@ -25,7 +25,8 @@ COPY sample_logs/ ./sample_logs/
 COPY cli.py     ./
 RUN useradd -m -u 1000 siemuser && mkdir -p /data && chown -R siemuser:siemuser /app /data
 USER siemuser
+# L-2: Use dedicated /health endpoint for healthcheck (returns minimal info)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/formats')"
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
 EXPOSE 8000
 CMD ["python", "-m", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]

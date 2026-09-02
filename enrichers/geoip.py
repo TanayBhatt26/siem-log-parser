@@ -37,10 +37,11 @@ def _batch_lookup(ips: List[str]) -> Dict[str, dict]:
     for i in range(0, len(public), BATCH_SIZE):
         batch = public[i:i+BATCH_SIZE]
         try:
+            # M-7: Timeout set to 10 seconds for external API calls
             resp = requests.post(
                 BATCH_URL,
                 json=[{"query": ip, "fields": FIELDS} for ip in batch],
-                timeout=8,
+                timeout=10,
             )
             if resp.status_code == 200:
                 for item in resp.json():

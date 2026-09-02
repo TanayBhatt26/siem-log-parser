@@ -22,11 +22,12 @@ KNOWN_BAD_IPS = {
 
 def _check_abuseipdb(ip: str, api_key: str) -> dict:
     try:
+        # M-7: Timeout set to 10 seconds for external API calls
         resp = requests.get(
             ABUSEIPDB_URL,
             headers={"Key": api_key, "Accept": "application/json"},
             params={"ipAddress": ip, "maxAgeInDays": 90},
-            timeout=5,
+            timeout=10,
         )
         if resp.status_code == 200:
             data = resp.json().get("data", {})
